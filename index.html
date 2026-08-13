@@ -46,6 +46,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 .lbr .d{width:8px;height:8px;border-radius:2px}
 .lbr .n{flex:1;font-weight:700;text-transform:uppercase}
 .lbr .g{color:#bbb;font-size:11px;text-align:right;min-width:38px}
+.lbr.me{background:linear-gradient(90deg, rgba(255,255,255,0.16) 0%, transparent 100%);border-left:3px solid #fff}
+.lbr.me .n{color:#fff}
 
 /* Position Rechts Oben */
 #h-tr{position:absolute;top:15px;right:15px;background:rgba(10,10,10,0.85);border-radius:6px;border:1px solid rgba(255,255,255,0.1);padding:8px 15px;text-align:center;display:flex;flex-direction:column;align-items:center}
@@ -169,7 +171,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
       <div class="cb cbr" id="cb-brk">BREMSE</div>
     </div>
     <div class="cb" id="cb-cam" style="width:100%; font-size:12px; height:35px; color:#aaa; border-color:#444">KAMERA</div>
-    <div class="hint-txt">WASD · Pfeiltasten · E=Kamera</div>
+    <div class="hint-txt">WASD · Pfeiltasten · E=Kamera · M=Ton</div>
   </div>
   
   <!-- Rechts Panel -->
@@ -183,7 +185,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
       <div class="cb cbr" id="cb-brk-r">BREMSE</div>
     </div>
     <div class="cb" id="cb-cam-r" style="width:100%; font-size:12px; height:35px; color:#aaa; border-color:#444">KAMERA</div>
-    <div class="hint-txt">WASD · Pfeiltasten · E=Kamera</div>
+    <div class="hint-txt">WASD · Pfeiltasten · E=Kamera · M=Ton</div>
   </div>
 </div>
 
@@ -192,8 +194,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+    "three": "./libs/build/three.module.js",
+    "three/addons/": "./libs/jsm/"
   }
 }
 </script>
@@ -241,12 +243,70 @@ let selTeam=0,selTrack=0,camMode=0,gs='menu';
 const CAMS=['T-CAM','VERFOLGUNG','COCKPIT','TV-CAM','TOP-DOWN'];
 const K={u:false,d:false,l:false,r:false};
 
+// === Motorensound (WebAudio, komplett synthetisiert, keine externen Dateien) ===
+const Engine=(()=>{
+  let ctx=null,master=null,lpf=null,osc1,osc2,sub,noiseGain;
+  let running=false,muted=false;const VOL=0.16;
+  function build(){
+    if(ctx)return;
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    ctx=new AC();
+    master=ctx.createGain();master.gain.value=0;master.connect(ctx.destination);
+    lpf=ctx.createBiquadFilter();lpf.type='lowpass';lpf.frequency.value=900;lpf.Q.value=7;lpf.connect(master);
+    osc1=ctx.createOscillator();osc1.type='sawtooth';
+    osc2=ctx.createOscillator();osc2.type='sawtooth';osc2.detune.value=14;
+    sub =ctx.createOscillator();sub.type='square';
+    const g1=ctx.createGain();g1.gain.value=0.5;osc1.connect(g1).connect(lpf);
+    const g2=ctx.createGain();g2.gain.value=0.32;osc2.connect(g2).connect(lpf);
+    const gs=ctx.createGain();gs.gain.value=0.22;sub.connect(gs).connect(lpf);
+    // Rauschen fuer "Grit"/Ansaug-Textur
+    const n=ctx.sampleRate*2,buf=ctx.createBuffer(1,n,ctx.sampleRate),d=buf.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
+    const nsrc=ctx.createBufferSource();nsrc.buffer=buf;nsrc.loop=true;
+    const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.value=1200;nf.Q.value=0.6;
+    noiseGain=ctx.createGain();noiseGain.gain.value=0;
+    nsrc.connect(nf).connect(noiseGain).connect(master);
+    osc1.start();osc2.start();sub.start();nsrc.start();
+  }
+  function arm(){build();if(ctx&&ctx.state==='suspended')ctx.resume();}
+  function start(){
+    build();if(!ctx)return;
+    if(ctx.state==='suspended')ctx.resume();
+    running=true;const t=ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.linearRampToValueAtTime(muted?0:VOL,t+0.3);
+  }
+  function stop(){
+    running=false;if(!ctx)return;const t=ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.linearRampToValueAtTime(0,t+0.25);
+  }
+  function update(spdFrac,gearProg,throttle){
+    if(!ctx||!running)return;const t=ctx.currentTime;
+    const freq=52+gearProg*130+spdFrac*70;
+    osc1.frequency.setTargetAtTime(freq,t,0.03);
+    osc2.frequency.setTargetAtTime(freq*1.006,t,0.03);
+    sub.frequency.setTargetAtTime(freq*0.5,t,0.05);
+    lpf.frequency.setTargetAtTime(500+spdFrac*4200+gearProg*1600,t,0.05);
+    noiseGain.gain.setTargetAtTime((throttle?0.06:0.025)+spdFrac*0.05,t,0.08);
+  }
+  function toggleMute(){
+    muted=!muted;if(ctx){const t=ctx.currentTime;
+      master.gain.cancelScheduledValues(t);
+      master.gain.linearRampToValueAtTime(muted?0:(running?VOL:0),t+0.15);}
+    return muted;
+  }
+  return {arm,start,stop,update,toggleMute,isMuted:()=>muted};
+})();
+
 document.addEventListener('keydown',e=>{
   if(e.key==='ArrowUp'   ||e.key==='w'){K.u=true;e.preventDefault();}
   if(e.key==='ArrowDown' ||e.key==='s'){K.d=true;e.preventDefault();}
   if(e.key==='ArrowLeft' ||e.key==='a'){K.l=true;e.preventDefault();}
   if(e.key==='ArrowRight'||e.key==='d'){K.r=true;e.preventDefault();}
   if(e.key==='e'||e.key==='E') nextCam();
+  if(e.key==='m'||e.key==='M'){const m=Engine.toggleMute();const c=document.getElementById('h-cam');if(c){c.textContent=m?'🔇 TON AUS · M=Ton':'🔊 TON AN · M=Ton';setTimeout(()=>{c.textContent='📷 '+CAMS[camMode]+' · E=Kamera';},1200);}}
 });
 document.addEventListener('keyup',e=>{
   if(e.key==='ArrowUp'   ||e.key==='w') K.u=false;
@@ -285,8 +345,8 @@ function showOnly(id){
 showOnly('s-name');
 
 document.getElementById('btn-to-team').onclick=()=>{showOnly('s-team');buildTeamSel();};
-document.getElementById('btn-start').onclick=()=>{showOnly(null);startRace();};
-document.getElementById('btn-again').onclick=()=>{showOnly('s-team');gs='menu';};
+document.getElementById('btn-start').onclick=()=>{showOnly(null);Engine.arm();startRace();};
+document.getElementById('btn-again').onclick=()=>{Engine.stop();showOnly('s-team');gs='menu';};
 
 function carSVG(t){
   return`<svg viewBox="0 0 180 50">
@@ -810,9 +870,9 @@ function gridPlace(k){
 async function startRace(){
   await buildWorld();
   const p0=gridPlace(5);
-  PL={t:p0.t,wx:p0.pos.x,wy:p0.pos.y,wz:p0.pos.z,spd:0,ang:p0.ang,lap:0,_l:0,ls:0,bl:Infinity,ft:0,done:false,batt:94};
+  PL={t:p0.t,wx:p0.pos.x,wy:p0.pos.y,wz:p0.pos.z,spd:0,ang:p0.ang,lap:0,_l:0,ls:0,bl:Infinity,ft:0,done:false,batt:94,team:TEAMS[selTeam],isPL:true};
   AI=aiTeams.map((team,i)=>{const g=gridPlace(i);
-    return{u:g.u,t:g.t,lat:gridLat(i),latV:0,spd:0,yaw:0,prof:AI_PROF[team.s]||DEF_PROF,_l:0,ls:0,done:false,ft:0};});
+    return{u:g.u,t:g.t,lat:gridLat(i),latV:0,spd:0,yaw:0,prof:AI_PROF[team.s]||DEF_PROF,_l:0,ls:0,done:false,ft:0,team:team};});
   rSt=null;gOv=false;gs='racing';
   if(plM&&plM.position){plM.position.set(PL.wx,PL.wy,PL.wz);plM.rotation.set(0,PL.ang,0);}
   moveAI(0,0);draw3D();
@@ -824,6 +884,7 @@ async function startRace(){
       setTimeout(()=>{
         document.getElementById('lights').style.display='none';
         rSt=performance.now();PL.ls=rSt;AI.forEach(c=>c.ls=rSt);
+        Engine.start();
         lastT=null;requestAnimationFrame(loop);
       },300);
     },700);}
@@ -984,6 +1045,8 @@ function aiCollide(){
 function updateHUD(ts){
   const mph=Math.round(PL.spd*2.237),rpm=Math.round(6000+PL.spd/MV*7000);
   const gear=Math.max(1,Math.min(8,Math.ceil(PL.spd/MV*8)));
+  const gSize=MV/8, gProg=Math.max(0,Math.min(1,(PL.spd-(gear-1)*gSize)/gSize));
+  Engine.update(PL.spd/MV, gProg, K.u);
   document.getElementById('hMph').textContent=mph;
   document.getElementById('hRpm').textContent='RPM '+rpm.toLocaleString();
   document.getElementById('h-gn').textContent=gear||1;
@@ -994,11 +1057,21 @@ function updateHUD(ts){
   const pos=all.indexOf(PL)+1;
   document.getElementById('h-pos').textContent=pos;
   document.getElementById('h-pof').textContent='/'+all.length;
-  if(document.getElementById('mypos'))document.getElementById('mypos').textContent=pos;
-  if(document.getElementById('mygap'))document.getElementById('mygap').textContent=pos===1?'LEAD':'+'+Math.min(99,(all[0]._l+all[0].t-PL._l-PL.t)*50).toFixed(3);
+  const lb=document.getElementById('h-lb');
+  const leadProg=all[0]._l+all[0].t;
+  let lbHtml='';
+  all.forEach((c,idx)=>{
+    const tm=c.team||TEAMS[selTeam];
+    const nm=c.isPL?(playerName||'DU'):tm.s;
+    const gap=idx===0?'LEAD':'+'+Math.min(99,(leadProg-(c._l+c.t))*50).toFixed(3);
+    lbHtml+=`<div class="lbr${c.isPL?' me':''}"><span class="p">${idx+1}</span><span class="d" style="background:${tm.tc}"></span><span class="n">${nm}</span><span class="g">${gap}</span></div>`;
+  });
+  lb.innerHTML=lbHtml;
   circ('cBatt',PL.batt/100,'#00e5ff', true);
   const rp=PL.spd/MV;circ('cMph',rp,rp>.88?TEAMS[selTeam].tc:rp>.65?'#ffaa00':'#00ff55', false);
-  if(PL.done&&!gOv){gOv=true;setTimeout(()=>{showOnly('s-finish');document.getElementById('fin-r').innerHTML=`P${pos} von ${all.length}!<br>Zeit: <b>${fmt(PL.ft)}</b><br>Beste Runde: <b style="color:${TEAMS[selTeam].tc}">${PL.bl<Infinity?fmt(PL.bl):'--'}</b>`;},1200);}
+  if(PL.done&&!gOv){gOv=true;Engine.stop();
+    const finalPos=AI.filter(c=>c.done&&c.ft<PL.ft).length+1;
+    setTimeout(()=>{showOnly('s-finish');document.getElementById('fin-r').innerHTML=`P${finalPos} von ${all.length}!<br>Zeit: <b>${fmt(PL.ft)}</b><br>Beste Runde: <b style="color:${TEAMS[selTeam].tc}">${PL.bl<Infinity?fmt(PL.bl):'--'}</b>`;},1200);}
 }
 
 function fmt(ms){const s=Math.floor(ms/1000),m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'0')+'.'+String(Math.floor(ms%1000)).padStart(3,'0');}
