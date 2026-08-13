@@ -15,3 +15,6 @@ _alt/
 *:Zone.Identifier
 Thumbs.db
 desktop.ini
+
+# Windows-Internetverknuepfungen
+*.url
