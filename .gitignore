@@ -1,0 +1,17 @@
+# Ungenutzte Roh-Assets (Spiel lädt nur models/*.glb)
+assets/
+
+# Lokale Backups alter index-Varianten
+_alt/
+
+# Lokale Claude-Einstellungen
+.claude/
+
+# macOS Resource-Forks & Metadaten
+._*
+.DS_Store
+
+# Windows Download-Marker & Junk
+*:Zone.Identifier
+Thumbs.db
+desktop.ini
