@@ -7,7 +7,7 @@ Ein browserbasiertes **3D-Formel-1-Rennspiel**, gebaut mit [Three.js](https://th
 - **6 Teams** mit echten 3D-Automodellen: Ferrrarri, Red Bull, McLaren, Haas, Mercedes, ATOMIKS
 - **3 Strecken**: L-Strecke, Monza, Großer G-Track
 - **5 Kameras**: T-Cam, Verfolgung, Cockpit, TV-Cam, Top-Down (Taste `E` wechselt)
-- **Tag-Nacht-Wechsel im Zeitraffer**: Sonne und Mond ziehen ihre echte Bahn, aber ein ganzer Tag dauert nur 8 Minuten — Sonnenaufgang, Mittag, Abendrot und Sternenhimmel mit Mond in seiner echten Phase, alles während des Fahrens
+- **Echter Tag-Nacht-Wechsel**: Sonne und Mond stehen dort, wo sie zur echten Uhrzeit wirklich stehen — mittags hoch im Süden, Morgen- und Abenddämmerung zur richtigen Zeit, nachts Sternenhimmel mit Vollmond
 - **KI-Gegner** mit individuellen Fahrprofilen (Topspeed, Grip, Bremse, Aggressivität)
 - Vollständiges **HUD**: Live-Leaderboard, Position, Rundenzeit, Tacho, Gang- und Power-Anzeige
 - Startampel, 3 Runden, Ziel-Screen
@@ -38,14 +38,14 @@ Alternativ unter Windows einfach `start_server.bat` doppelklicken.
 
 ## Tageszeit
 
-Das Spiel startet zur echten Uhrzeit, danach läuft die Zeit **180-mal schneller**:
-ein ganzer Tag dauert 8 Minuten, eine echte Sekunde sind 3 Spielminuten. Während
-eines Rennens wandert die Sonne also sichtbar weiter.
+Der Himmel richtet sich nach der **echten Uhrzeit**. Der Mond wird immer als
+Vollmond gezeigt, steht aber an seiner wirklichen Stelle am Himmel — er ist also
+nicht jede Nacht zu sehen.
 
 Einstellen im Script:
 
-- `const TAG_MINUTEN=8` — wie lange ein ganzer Tag dauert
 - `const ORT` — Standort, bestimmt Sonnenhöhe und Auf-/Untergang (Vorgabe: Zürich)
+- `const VOLLMOND=true` — auf `false` zeigt der Mond seine echte Phase
 
 Startzeit vorgeben in der Adresszeile:
 
@@ -56,7 +56,7 @@ Startzeit vorgeben in der Adresszeile:
 | `index.html?zeit=20:45` | Abendrot |
 | `index.html?zeit=23:30` | Nacht mit Sternen |
 | `index.html?zeit=12:00&datum=2026-12-21` | Mittag am kürzesten Tag |
-| `index.html?tempo=1` | echte Zeit, kein Zeitraffer |
+| `index.html?tempo=180` | Zeitraffer: ein ganzer Tag in 8 Minuten |
 
 ## Technik
 

@@ -782,11 +782,12 @@ renderer.setSize(VW,VH);renderer.shadowMap.enabled=true;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;
 
 const scene=new THREE.Scene();
-// === Tages- und Nachtverlauf im Zeitraffer ==================================
-// Sonne und Mond ziehen ihre echte Bahn, aber die Zeit laeuft schneller:
-// ein ganzer Tag dauert TAG_MINUTEN Minuten. So sieht man Sonnenaufgang,
-// Mittag, Abendrot und Sternenhimmel, ohne darauf warten zu muessen.
-const TAG_MINUTEN=8;          // Dauer eines ganzen Tages im Spiel
+// === Echter Tages- und Nachtverlauf =========================================
+// Sonne und Mond stehen dort, wo sie zur echten Uhrzeit wirklich stehen.
+//
+// Der Mond wird immer als Vollmond gezeigt - Halb- und Viertelmond sehen im
+// Spiel nur nach einem angeknabberten Kreis aus.
+const VOLLMOND=true;
 //
 // ORT bestimmt, wie hoch die Sonne steigt und wann sie auf- und untergeht.
 const ORT={lat:47.3769, lon:8.5417, name:'Zuerich'};
@@ -795,12 +796,11 @@ const ORT={lat:47.3769, lon:8.5417, name:'Zuerich'};
 //   ?zeit=22:30           -> beginnt nachts
 //   ?zeit=06:15           -> beginnt zur Morgendaemmerung
 //   ?zeit=12:00&datum=2026-12-21
-//   ?tempo=1              -> echte Zeit, nichts laeuft schneller
+//   ?tempo=180            -> Zeitraffer zum Anschauen (ein Tag in 8 Minuten)
 const _q=new URLSearchParams(location.search);
 const ZEIT_TEST=_q.get('zeit'), DATUM_TEST=_q.get('datum');
-// Wie viele Spielsekunden auf eine echte Sekunde kommen
-const ZEIT_TEMPO=_q.has('tempo') ? Math.max(1,Number(_q.get('tempo'))||1)
-                                 : 1440/TAG_MINUTEN;
+// Wie viele Spielsekunden auf eine echte Sekunde kommen. 1 = echte Zeit.
+const ZEIT_TEMPO=_q.has('tempo') ? Math.max(1,Number(_q.get('tempo'))||1) : 1;
 
 // Startzeitpunkt: echte Uhrzeit, oder was in der Adresszeile steht
 const START_ZEIT=(()=>{
@@ -1087,6 +1087,7 @@ function updateSky(force){
   const now=jetzt();
   const s=sonnenStand(now), m=mondStand(now);
   const sunElDeg=s.el/RAD, moonElDeg=m.el/RAD;
+  const phase=VOLLMOND?1:m.phase;     // 1 = voll beleuchtet
   const p=himmelBei(sunElDeg);
 
   // Himmelsfarben, Nebel und Grundlicht
@@ -1110,9 +1111,9 @@ function updateSky(force){
   }else{
     dir=mDir.clone();
     farbe=new THREE.Color(0xbfd2ff);
-    // Mondlicht: heller bei hohem Vollmond. Der Mindestwert sorgt dafuer, dass
-    // die Strecke auch bei Neumond oder untergegangenem Mond fahrbar bleibt.
-    staerke=moonElDeg>0 ? 0.95+0.60*m.phase*Math.min(1,moonElDeg/25) : 0.95;
+    // Mondlicht: heller, je hoeher der Mond steht. Der Mindestwert sorgt
+    // dafuer, dass die Strecke auch bei untergegangenem Mond fahrbar bleibt.
+    staerke=moonElDeg>0 ? 0.95+0.60*phase*Math.min(1,moonElDeg/25) : 0.95;
   }
   // Das Licht darf nie von unten kommen, sonst liegt die Strecke im Dunkeln
   // und die Schatten zeigen nach oben.
@@ -1132,11 +1133,12 @@ function updateSky(force){
   moonDisc.material.opacity=sunElDeg>3?0.35:1;
   moonGlow.material.opacity=sunElDeg>0?0.15:1;
 
-  // Mondphase nur neu zeichnen, wenn sie sich merklich geaendert hat
+  // Mondbild nur neu zeichnen, wenn sich die Phase merklich geaendert hat.
+  // Bei VOLLMOND passiert das genau einmal.
   const zunehmend=(((m.elong%(2*Math.PI))+2*Math.PI)%(2*Math.PI))<Math.PI;
-  if(force||Math.abs(m.phase-letztePhase)>0.01){
-    letztePhase=m.phase;
-    drawMoon(m.phase,zunehmend);
+  if(force||Math.abs(phase-letztePhase)>0.01){
+    letztePhase=phase;
+    drawMoon(phase,zunehmend);
     moonTex.needsUpdate=true;
   }
 }
