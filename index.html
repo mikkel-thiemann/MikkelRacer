@@ -148,7 +148,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
   <div id="h-sub">KARRIERE-VERLAUF</div>
   <div id="h-tog">
     <button class="htg sel" id="tg-me">MEINE</button>
-    <button class="htg" id="tg-world">🌍 WELTWEIT</button>
+    <button class="htg" id="tg-world">🇨🇭 SCHWEIZ</button>
   </div>
   <div id="h-stats"></div>
   <div id="h-filter"></div>
@@ -530,7 +530,7 @@ document.getElementById('btn-again').onclick=()=>{Engine.stop();showOnly('s-team
 // === Ergebnis-Verlauf (pro Account im localStorage) =========================
 let histFrom='s-menu';
 let histTrack=null;          // null = alle Strecken, sonst Streckenname
-let histMode='me';           // 'me' = eigene Rennen, 'world' = weltweite Bestenliste
+let histMode='me';           // 'me' = eigene Rennen, 'world' = Schweizer Bestenliste
 const histKey=()=>'racerX_hist_'+(playerName||'_');
 
 function loadHist(){
@@ -542,13 +542,13 @@ function saveResult(r){
   const h=loadHist();
   h.unshift(r);                       // neuestes Rennen zuoberst
   localStorage.setItem(histKey(),JSON.stringify(h.slice(0,100)));
-  sendWorld(r);                       // zusaetzlich in die weltweite Liste
+  sendWorld(r);                       // zusaetzlich in die Schweizer Liste
 }
 
-// === Weltweite Bestenliste ==================================================
+// === Schweizer Bestenliste ==================================================
 // Hier die beiden Werte aus deinem Supabase-Projekt eintragen
 // (Project Settings -> API): Project URL und der "anon public" Key.
-// Solange sie leer sind, laeuft das Spiel normal, nur ohne Weltliste.
+// Solange sie leer sind, laeuft das Spiel normal, nur ohne gemeinsame Liste.
 const WORLD={
   url:'',                    // z.B. 'https://abcdefgh.supabase.co'
   key:'',                    // der anon public Key
@@ -669,29 +669,29 @@ function buildMine(){
   }).join('');
 }
 
-// --- Weltweite Bestenliste: statt Team steht der Name des Fahrers ---
+// --- Schweizer Bestenliste: statt Team steht der Name des Fahrers ---
 // (heisst bewusst nicht buildWorld - so heisst schon der Streckenaufbau)
 function buildWorldList(){
-  document.getElementById('h-title').textContent='WELTWEIT';
-  document.getElementById('h-sub').textContent='BESTE RUNDEN ALLER FAHRER';
+  document.getElementById('h-title').textContent='SCHWEIZ';
+  document.getElementById('h-sub').textContent='BESTE RUNDEN AUS DER GANZEN SCHWEIZ';
   setHead('FAHRER');
   document.getElementById('h-stats').innerHTML='';
 
   if(!worldOn()){
     buildFilter([]); setNote('');
-    showEmpty('Die weltweite Liste ist noch nicht eingerichtet.<br>'+
+    showEmpty('Die Schweizer Liste ist noch nicht eingerichtet.<br>'+
       'Dazu in <code>index.html</code> bei <code>const WORLD</code> die Supabase-URL und den Key eintragen.');
     return;
   }
   if(worldRows===null){
     buildFilter([]); setNote('');
-    showEmpty('Lade weltweite Ergebnisse …');
+    showEmpty('Lade Schweizer Ergebnisse …');
     fetchWorld();
     return;
   }
   if(worldErr){
     buildFilter([]); setNote('');
-    showEmpty('Weltweite Liste nicht erreichbar.<br><code>'+esc(worldErr)+'</code>');
+    showEmpty('Schweizer Liste nicht erreichbar.<br><code>'+esc(worldErr)+'</code>');
     return;
   }
 
@@ -700,13 +700,13 @@ function buildWorldList(){
   const h=histTrack?ranked.filter(r=>r.track===histTrack):ranked;
   setNote(histTrack?'Schnellste Runde pro Fahrer auf dieser Strecke.'
                    :'Achtung: Strecken gemischt — fuer einen fairen Vergleich oben eine Strecke waehlen.');
-  showEmpty(h.length?null:'Hier hat weltweit noch niemand ein Rennen beendet.');
+  showEmpty(h.length?null:'Hier hat in der Schweiz noch niemand ein Rennen beendet.');
 
   const drivers=new Set(h.map(r=>r.name)).size;
   const mine=h.findIndex(r=>r.name===(playerName||'DU'))+1;
   document.getElementById('h-stats').innerHTML=
     `<div><b>${h.length}</b>EINTRÄGE</div><div><b>${drivers}</b>FAHRER</div>`+
-    `<div><b>${h.length?esc(h[0].best):'--'}</b>WELTREKORD</div>`+
+    `<div><b>${h.length?esc(h[0].best):'--'}</b>REKORD</div>`+
     `<div><b>${mine?'P'+mine:'--'}</b>DEIN RANG</div>`;
 
   document.getElementById('h-body').innerHTML=h.map((r,i)=>{

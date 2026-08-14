@@ -1,6 +1,6 @@
-# Weltweite Bestenliste einrichten
+# Schweizer Bestenliste einrichten
 
-Die Liste "🌍 WELTWEIT" braucht eine Datenbank, die alle Spieler erreichen.
+Die Liste "🇨🇭 SCHWEIZ" braucht eine Datenbank, die alle Spieler erreichen.
 Das Spiel selbst liegt auf GitHub Pages und kann nichts speichern.
 
 Wir nutzen **Supabase** (kostenlos, keine Kreditkarte). Dauert ca. 5 Minuten.
@@ -62,21 +62,21 @@ Den `service_role` Key **niemals** eintragen, der darf alles.
 
 ```bash
 git add index.html
-git commit -m "Weltweite Bestenliste aktiviert"
+git commit -m "Bestenliste aktiviert"
 git push
 ```
 
 Nach ein paar Minuten ist es auf <https://mikkel-thiemann.github.io/MikkelRacer/>
-aktiv. Ab dann landet jedes beendete Rennen in der weltweiten Liste.
+aktiv. Ab dann landet jedes beendete Rennen in der gemeinsamen Liste.
 
 ## Gut zu wissen
 
-- In der Weltliste steht **der Name des Fahrers** statt des Teams. Der Name ist
+- In der Bestenliste steht **der Name des Fahrers** statt des Teams. Der Name ist
   der, den man am Anfang eingibt — also für alle sichtbar. Am besten keinen
   echten Nachnamen verwenden.
 - Gezeigt wird pro Fahrer und Strecke nur die **schnellste Runde**,
   sortiert von schnell nach langsam. Deine eigene Zeile ist gelb.
-- Der Streckenfilter funktioniert auch in der Weltliste.
+- Der Streckenfilter funktioniert auch in der Bestenliste.
 - Jeder kann Eintraege schicken, auch mit erfundenen Zeiten — es gibt keine
   Pruefung. Fuer ein Spiel unter Freunden ist das ok.
 - Falls jemand Unsinn eintraegt: im Supabase **Table Editor** die Zeile
