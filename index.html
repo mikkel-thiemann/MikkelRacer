@@ -1566,90 +1566,17 @@ async function buildWorld(){
     sq.position.copy(TC.getPoint(0));sq.position.addScaledVector(TF[0].right,(-rw/2)+(i+.5)*(rw/10));sq.position.y=.04;scene.add(sq);
   }
 
-  // === Baeume: rundherum verteilen, nur nicht auf der Strecke ===
-  // Zum Einstellen:
-  const BAUM_RAND=340;        // wie weit ueber die Strecke hinaus bewaldet wird
-  const BAUM_RASTER=26;       // mittlerer Abstand zwischen zwei Baeumen
-  const BAUM_FREI=rw/2+7;     // Sicherheitsabstand zur Fahrbahn
-  // Die 3D-Baummodelle haben je rund 28000 Dreiecke. Ein ganzer Wald daraus
-  // waere viel zu langsam, darum bekommen nur die Baeume nahe der Strecke ein
-  // Modell; weiter draussen stehen einfache Baeume aus Kegel und Stamm.
-  const BAUM_NAH=110;         // bis hierhin die schoenen Modelle
-  const BAUM_MODELLE=320;     // hoechstens so viele Modellbaeume
-  const BAUM_EINFACH=2600;    // hoechstens so viele einfache Baeume
-
-  // Gitter mit allen Streckenpunkten. Damit laesst sich fuer jeden Baumplatz
-  // schnell fragen, wie weit die Strecke weg ist, ohne alle Punkte zu pruefen.
-  const zelle=70, gitter=new Map();
-  TF.forEach(f=>{
-    const k=Math.floor(f.pos.x/zelle)+'/'+Math.floor(f.pos.z/zelle);
-    let a=gitter.get(k); if(!a)gitter.set(k,a=[]);
-    a.push(f.pos);
-  });
-  function abstandZurStrecke(x,z){
-    let min=Infinity;
-    const cx=Math.floor(x/zelle), cz=Math.floor(z/zelle);
-    for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){
-      const a=gitter.get((cx+i)+'/'+(cz+j));
-      if(!a)continue;
-      for(const p of a){const d=Math.hypot(p.x-x,p.z-z); if(d<min)min=d;}
-    }
-    return min;   // Unendlich heisst: weiter weg als eine Zelle, also weit genug
-  }
-
-  const box=new THREE.Box3();
-  TF.forEach(f=>box.expandByPoint(f.pos));
-  box.expandByScalar(BAUM_RAND);
-
-  let treeSpots=[], fernSpots=[];
-  for(let x=box.min.x;x<box.max.x;x+=BAUM_RASTER){
-    for(let z=box.min.z;z<box.max.z;z+=BAUM_RASTER){
-      // Platz im Raster zufaellig verschieben, sonst stehen sie in Reih und Glied
-      const tx=x+(Math.random()-0.5)*BAUM_RASTER*0.95;
-      const tz=z+(Math.random()-0.5)*BAUM_RASTER*0.95;
-      const d=abstandZurStrecke(tx,tz);
-      if(d<BAUM_FREI)continue;             // Fahrbahn und Randstreifen frei halten
-      if(inGrandstand(tx,tz,3))continue;   // Platz gehoert zur Tribuene
-      // Am Streckenrand dichter, weiter draussen lockerer
-      if(Math.random() > (d<70?0.85:d<160?0.65:0.5))continue;
-      (d<BAUM_NAH?treeSpots:fernSpots).push([tx,0,tz]);
-    }
-  }
-  const mischen=a=>{for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;};
-  if(treeSpots.length>BAUM_MODELLE){
-    // die uebrigen nahen Plaetze bekommen einfache Baeume statt gar keiner
-    mischen(treeSpots);
-    fernSpots=fernSpots.concat(treeSpots.slice(BAUM_MODELLE));
-    treeSpots=treeSpots.slice(0,BAUM_MODELLE);
-  }
-  if(fernSpots.length>BAUM_EINFACH)fernSpots=mischen(fernSpots).slice(0,BAUM_EINFACH);
-
-  // Einfache Baeume: ein Stamm- und ein Kronen-Zeichenaufruf fuer alle zusammen
-  if(fernSpots.length){
-    const stammGeo=new THREE.CylinderGeometry(0.05,0.08,0.5,5); stammGeo.translate(0,0.25,0);
-    const kroneGeo=new THREE.ConeGeometry(0.30,0.9,7);          kroneGeo.translate(0,0.85,0);
-    const stammMat=new THREE.MeshLambertMaterial({color:0x5b4632});
-    const kroneMat=new THREE.MeshLambertMaterial({color:0x35682f});
-    const stamm=new THREE.InstancedMesh(stammGeo,stammMat,fernSpots.length);
-    const krone=new THREE.InstancedMesh(kroneGeo,kroneMat,fernSpots.length);
-    krone.receiveShadow=true;
-    const mtx=new THREE.Matrix4(),qt=new THREE.Quaternion(),
-          vP=new THREE.Vector3(),vS=new THREE.Vector3(),axY=new THREE.Vector3(0,1,0),
-          farbe=new THREE.Color();
-    fernSpots.forEach(([tx,ty,tz],k)=>{
-      const h=11+Math.random()*15, breite=0.85+Math.random()*0.35;
-      vP.set(tx,ty,tz);
-      qt.setFromAxisAngle(axY,Math.random()*Math.PI*2);
-      vS.set(h*breite,h,h*breite);
-      mtx.compose(vP,qt,vS);
-      stamm.setMatrixAt(k,mtx); krone.setMatrixAt(k,mtx);
-      // jeder Baum ein etwas anderes Gruen, sonst wirkt der Wald wie gestempelt
-      farbe.setHSL(0.26+Math.random()*0.06, 0.35+Math.random()*0.2, 0.22+Math.random()*0.12);
-      krone.setColorAt(k,farbe);
+  // === Baeume: Plaetze sammeln, dann als 3D-Modelle instanzieren ===
+  const treeSpots=[];
+  for(let i=0;i<N;i+=3){
+    const{pos,right}=TF[i];
+    [-1,1].forEach(s=>{
+      if(Math.random()<=0.15)return;
+      const offset = rw/2 + 5 + Math.random()*30;
+      const tx=pos.x+right.x*s*offset, tz=pos.z+right.z*s*offset;
+      if(inGrandstand(tx,tz,3))return;   // Platz gehoert zur Tribuene
+      treeSpots.push([tx,pos.y,tz]);
     });
-    stamm.instanceMatrix.needsUpdate=true; krone.instanceMatrix.needsUpdate=true;
-    if(krone.instanceColor)krone.instanceColor.needsUpdate=true;
-    scene.add(stamm); scene.add(krone);
   }
 
   const tModels=await loadTreeModels();
