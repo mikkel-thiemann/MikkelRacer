@@ -167,10 +167,10 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 </div>
 
 <div class="screen" id="s-team">
-  <div id="bigbg">FERRARI</div>
+  <div id="bigbg">FERRRARRI</div>
   <div id="t-content">
     <div class="ts-lbl">TEAM SELECT</div>
-    <div id="t-name">FERRARI</div>
+    <div id="t-name">FERRRARRI</div>
     <div id="t-grid"></div>
     <div style="font-size:9px;color:#444;letter-spacing:.1em">STRECKE</div>
     <div id="trk-row"></div>
@@ -279,7 +279,7 @@ document.getElementById('btn-set-name').onclick = () => {
 };
 
 const TEAMS=[
-  {n:'FERRARI',  s:'FERRARI', body:0xDC0000,b2:0x111111,halo:0x111111,nose:0xDC0000,rim:0xC8A000,tc:'#DC0000',c1:'#DC0000',c2:'#111111'},
+  {n:'FERRRARRI',s:'FERRRARRI',mdl:'FERRARI', body:0xDC0000,b2:0x111111,halo:0x111111,nose:0xDC0000,rim:0xC8A000,tc:'#DC0000',c1:'#DC0000',c2:'#111111'},
   {n:'RED BULL', s:'REDBULL',  body:0x0A0E2E,b2:0x060918,halo:0x060918,nose:0xFFD700,rim:0xFFD700,tc:'#3671C6',c1:'#0A0E2E',c2:'#FFD700'},
   {n:'McLAREN',  s:'McLAREN',  body:0xFF8000,b2:0x111111,halo:0x111111,nose:0xFF8000,rim:0xC8A000,tc:'#FF8000',c1:'#FF8000',c2:'#111111'},
   {n:'HAAS',     s:'HAAS',     body:0xEEEEEE,b2:0x111111,halo:0x111111,nose:0xCC0000,rim:0xCC0000,tc:'#CC0000',c1:'#EEEEEE',c2:'#111111'},
@@ -945,7 +945,8 @@ function normalizeCar(obj){
 
 async function getCarModel(teamData) {
   const loader = new GLTFLoader();
-  const modelName = teamData.s;
+  // mdl = Dateiname des Modells, falls er vom angezeigten Teamnamen abweicht
+  const modelName = teamData.mdl || teamData.s;
   const modelPath = `models/${modelName}.glb`;
 
   try {
@@ -1435,7 +1436,7 @@ const AI_LAT_ACC=4.0;
 const AI_PROF={
   MERC    :{top:56,grip:14.6,acc:16.0,brake:32,aggr:0.70,line:0.85},
   REDBULL :{top:44,grip:17.5,acc:15.5,brake:29,aggr:0.85,line:1.00},
-  FERRARI :{top:43.5,grip:17.0,acc:15.0,brake:28,aggr:0.80,line:0.95},
+  FERRRARRI:{top:43.5,grip:17.0,acc:15.0,brake:28,aggr:0.80,line:0.95},
   McLAREN :{top:43,grip:16.5,acc:14.5,brake:27,aggr:0.75,line:0.90},
   ATOMIKS :{top:40,grip:14.8,acc:15.0,brake:24,aggr:0.55,line:0.65},
   HAAS    :{top:41,grip:15.0,acc:13.0,brake:25,aggr:0.60,line:0.70},

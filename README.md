@@ -4,7 +4,7 @@ Ein browserbasiertes **3D-Formel-1-Rennspiel**, gebaut mit [Three.js](https://th
 
 ## Features
 
-- **6 Teams** mit echten 3D-Automodellen: Ferrari, Red Bull, McLaren, Haas, Mercedes, ATOMIKS
+- **6 Teams** mit echten 3D-Automodellen: Ferrrarri, Red Bull, McLaren, Haas, Mercedes, ATOMIKS
 - **3 Strecken**: L-Strecke, Monza, Großer G-Track
 - **5 Kameras**: T-Cam, Verfolgung, Cockpit, TV-Cam, Top-Down (Taste `E` wechselt)
 - **KI-Gegner** mit individuellen Fahrprofilen (Topspeed, Grip, Bremse, Aggressivität)
