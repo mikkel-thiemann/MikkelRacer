@@ -117,7 +117,14 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 .hteam{display:flex;align-items:center;gap:7px;font-weight:700;text-transform:uppercase}
 .hdot{width:9px;height:9px;border-radius:2px;flex:none}
 .hdim{color:#777}
-#h-empty{color:#666;font-size:13px;padding:26px;text-align:center}
+#h-empty{color:#666;font-size:13px;padding:26px;text-align:center;line-height:1.7}
+#h-empty code{color:#999;font-size:11px}
+#h-tog{display:flex;gap:0;margin-bottom:2px;border:1.5px solid #333;border-radius:6px;overflow:hidden}
+.htg{padding:7px 22px;font-size:11px;font-weight:900;letter-spacing:.08em;cursor:pointer;background:transparent;border:none;color:#666}
+.htg:hover{color:#aaa}
+.htg.sel{background:#C5141E;color:#fff}
+#h-note{font-size:10px;color:#555;letter-spacing:.04em;height:13px}
+.hme{color:#f5c518}
 </style>
 </head>
 <body>
@@ -139,11 +146,16 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 <div class="screen" id="s-hist">
   <div id="h-title">MEINE ERGEBNISSE</div>
   <div id="h-sub">KARRIERE-VERLAUF</div>
+  <div id="h-tog">
+    <button class="htg sel" id="tg-me">MEINE</button>
+    <button class="htg" id="tg-world">🌍 WELTWEIT</button>
+  </div>
   <div id="h-stats"></div>
   <div id="h-filter"></div>
+  <div id="h-note"></div>
   <div id="h-wrap">
     <table id="h-tab">
-      <thead><tr><th>P</th><th>TEAM</th><th>STRECKE</th><th>ZEIT</th><th>BESTE RUNDE</th><th>WANN</th></tr></thead>
+      <thead><tr><th>P</th><th id="h-col2">TEAM</th><th>STRECKE</th><th>ZEIT</th><th>BESTE RUNDE</th><th>WANN</th></tr></thead>
       <tbody id="h-body"></tbody>
     </table>
     <div id="h-empty" style="display:none">Noch keine Rennen gefahren.</div>
@@ -518,6 +530,7 @@ document.getElementById('btn-again').onclick=()=>{Engine.stop();showOnly('s-team
 // === Ergebnis-Verlauf (pro Account im localStorage) =========================
 let histFrom='s-menu';
 let histTrack=null;          // null = alle Strecken, sonst Streckenname
+let histMode='me';           // 'me' = eigene Rennen, 'world' = weltweite Bestenliste
 const histKey=()=>'racerX_hist_'+(playerName||'_');
 
 function loadHist(){
@@ -529,6 +542,67 @@ function saveResult(r){
   const h=loadHist();
   h.unshift(r);                       // neuestes Rennen zuoberst
   localStorage.setItem(histKey(),JSON.stringify(h.slice(0,100)));
+  sendWorld(r);                       // zusaetzlich in die weltweite Liste
+}
+
+// === Weltweite Bestenliste ==================================================
+// Hier die beiden Werte aus deinem Supabase-Projekt eintragen
+// (Project Settings -> API): Project URL und der "anon public" Key.
+// Solange sie leer sind, laeuft das Spiel normal, nur ohne Weltliste.
+const WORLD={
+  url:'',                    // z.B. 'https://abcdefgh.supabase.co'
+  key:'',                    // der anon public Key
+  table:'results'
+};
+const worldOn=()=>!!(WORLD.url&&WORLD.key);
+const worldHead=()=>({apikey:WORLD.key,Authorization:'Bearer '+WORLD.key,'Content-Type':'application/json'});
+let worldRows=null, worldErr=null, worldBusy=false;
+
+// Rundenzeit "1:23.456" in Millisekunden, zum Sortieren
+function timeMs(s){
+  const m=/^(\d+):(\d+)\.(\d+)$/.exec(s||'');
+  return m?(+m[1]*60000+ +m[2]*1000+ +m[3]):Infinity;
+}
+
+function esc(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function sendWorld(r){
+  if(!worldOn())return;
+  try{
+    await fetch(WORLD.url+'/rest/v1/'+WORLD.table,{
+      method:'POST',
+      headers:{...worldHead(),Prefer:'return=minimal'},
+      body:JSON.stringify({name:(playerName||'DU').slice(0,20),team:r.team,track:r.track,
+        pos:r.pos,time:r.time,best:r.best,best_ms:timeMs(r.best),ts:r.ts})
+    });
+    worldRows=null;          // Liste beim naechsten Oeffnen neu holen
+  }catch(e){ console.warn('Ergebnis nicht hochgeladen:',e.message); }
+}
+
+async function fetchWorld(){
+  if(worldBusy)return;
+  worldBusy=true; worldErr=null;
+  try{
+    const res=await fetch(WORLD.url+'/rest/v1/'+WORLD.table+
+      '?select=name,team,track,pos,time,best,best_ms,ts&order=best_ms.asc&limit=1000',{headers:worldHead()});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    worldRows=await res.json();
+  }catch(e){ worldErr=e.message; worldRows=[]; }
+  worldBusy=false;
+  if(histMode==='world')buildHist();
+}
+
+// Pro Fahrer und Strecke nur die schnellste Runde, sortiert nach Zeit
+function worldBest(rows){
+  const m=new Map();
+  rows.forEach(r=>{
+    const k=(r.name||'?')+'|'+r.track;
+    const cur=m.get(k);
+    if(!cur||timeMs(r.best)<timeMs(cur.best))m.set(k,r);
+  });
+  return [...m.values()].sort((a,b)=>timeMs(a.best)-timeMs(b.best));
 }
 
 function fmtDate(ts){
@@ -552,15 +626,28 @@ function buildFilter(all){
 }
 
 function buildHist(){
+  return histMode==='world'?buildWorldList():buildMine();
+}
+
+function setHead(txt){document.getElementById('h-col2').textContent=txt;}
+function setNote(txt){document.getElementById('h-note').textContent=txt;}
+function showEmpty(msg){
+  const emp=document.getElementById('h-empty');
+  const on=!!msg;
+  emp.style.display=on?'block':'none';
+  emp.innerHTML=msg||'';
+  document.getElementById('h-tab').style.display=on?'none':'';
+}
+
+// --- Eigene Rennen (aus dem localStorage) ---
+function buildMine(){
   const all=loadHist();
   const h=histTrack?all.filter(r=>r.track===histTrack):all;
-  const body=document.getElementById('h-body');
   document.getElementById('h-title').textContent=(playerName||'DU').toUpperCase();
+  document.getElementById('h-sub').textContent='KARRIERE-VERLAUF';
+  setHead('TEAM'); setNote('');
   buildFilter(all);
-  const emp=document.getElementById('h-empty');
-  emp.style.display=h.length?'none':'block';
-  emp.textContent=all.length?'Auf dieser Strecke noch kein Rennen gefahren.':'Noch keine Rennen gefahren.';
-  document.getElementById('h-tab').style.display=h.length?'':'none';
+  showEmpty(h.length?null:(all.length?'Auf dieser Strecke noch kein Rennen gefahren.':'Noch keine Rennen gefahren.'));
   const wins=h.filter(r=>r.pos===1).length;
   const podium=h.filter(r=>r.pos<=3).length;
   const avg=h.length?(h.reduce((s,r)=>s+r.pos,0)/h.length).toFixed(1):'--';
@@ -569,17 +656,81 @@ function buildHist(){
     `<div><b>${h.length}</b>RENNEN</div><div><b>${wins}</b>SIEGE</div>`+
     `<div><b>${podium}</b>PODEST</div><div><b>${avg}</b>Ø PLATZ</div>`+
     `<div><b>${best?'P'+best:'--'}</b>BESTE</div>`;
-  body.innerHTML=h.map(r=>{
+  document.getElementById('h-body').innerHTML=h.map(r=>{
     const t=TEAMS.find(x=>x.n===r.team)||TEAMS[0];
     return `<tr>
       <td class="hp p${r.pos}">P${r.pos}</td>
-      <td><div class="hteam"><span class="hdot" style="background:${t.tc}"></span>${r.team}</div></td>
-      <td>${r.track}</td>
-      <td>${r.time}</td>
-      <td class="hdim">${r.best}</td>
+      <td><div class="hteam"><span class="hdot" style="background:${t.tc}"></span>${esc(r.team)}</div></td>
+      <td>${esc(r.track)}</td>
+      <td>${esc(r.time)}</td>
+      <td class="hdim">${esc(r.best)}</td>
       <td class="hdim">${fmtDate(r.ts)}</td>
     </tr>`;
   }).join('');
+}
+
+// --- Weltweite Bestenliste: statt Team steht der Name des Fahrers ---
+// (heisst bewusst nicht buildWorld - so heisst schon der Streckenaufbau)
+function buildWorldList(){
+  document.getElementById('h-title').textContent='WELTWEIT';
+  document.getElementById('h-sub').textContent='BESTE RUNDEN ALLER FAHRER';
+  setHead('FAHRER');
+  document.getElementById('h-stats').innerHTML='';
+
+  if(!worldOn()){
+    buildFilter([]); setNote('');
+    showEmpty('Die weltweite Liste ist noch nicht eingerichtet.<br>'+
+      'Dazu in <code>index.html</code> bei <code>const WORLD</code> die Supabase-URL und den Key eintragen.');
+    return;
+  }
+  if(worldRows===null){
+    buildFilter([]); setNote('');
+    showEmpty('Lade weltweite Ergebnisse …');
+    fetchWorld();
+    return;
+  }
+  if(worldErr){
+    buildFilter([]); setNote('');
+    showEmpty('Weltweite Liste nicht erreichbar.<br><code>'+esc(worldErr)+'</code>');
+    return;
+  }
+
+  const ranked=worldBest(worldRows);
+  buildFilter(ranked);
+  const h=histTrack?ranked.filter(r=>r.track===histTrack):ranked;
+  setNote(histTrack?'Schnellste Runde pro Fahrer auf dieser Strecke.'
+                   :'Achtung: Strecken gemischt — fuer einen fairen Vergleich oben eine Strecke waehlen.');
+  showEmpty(h.length?null:'Hier hat weltweit noch niemand ein Rennen beendet.');
+
+  const drivers=new Set(h.map(r=>r.name)).size;
+  const mine=h.findIndex(r=>r.name===(playerName||'DU'))+1;
+  document.getElementById('h-stats').innerHTML=
+    `<div><b>${h.length}</b>EINTRÄGE</div><div><b>${drivers}</b>FAHRER</div>`+
+    `<div><b>${h.length?esc(h[0].best):'--'}</b>WELTREKORD</div>`+
+    `<div><b>${mine?'P'+mine:'--'}</b>DEIN RANG</div>`;
+
+  document.getElementById('h-body').innerHTML=h.map((r,i)=>{
+    const t=TEAMS.find(x=>x.n===r.team)||TEAMS[0];
+    const me=r.name===(playerName||'DU');
+    return `<tr>
+      <td class="hp p${i+1}">P${i+1}</td>
+      <td><div class="hteam${me?' hme':''}"><span class="hdot" style="background:${t.tc}"></span>${esc(r.name||'?')}</div></td>
+      <td>${esc(r.track)}</td>
+      <td>${esc(r.time)}</td>
+      <td class="hdim">${esc(r.best)}</td>
+      <td class="hdim">${fmtDate(r.ts)}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('tg-me').onclick=()=>setMode('me');
+document.getElementById('tg-world').onclick=()=>setMode('world');
+function setMode(m){
+  histMode=m;
+  document.getElementById('tg-me').className='htg'+(m==='me'?' sel':'');
+  document.getElementById('tg-world').className='htg'+(m==='world'?' sel':'');
+  document.getElementById('btn-hist-clear').style.display=m==='me'?'':'none';
+  buildHist();
 }
 
 function openHist(from){histFrom=from;showOnly('s-hist');buildHist();}
