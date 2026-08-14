@@ -1,5 +1,12 @@
-# Ungenutzte Roh-Assets (Spiel lädt nur models/*.glb)
-assets/
+# Roh-Assets: standardmaessig ignoriert, ausser was das Spiel wirklich laedt.
+# (Motorensound und die drei Baummodelle aus TREE_FILES in index.html)
+assets/*
+!assets/f1-honda.mp3
+!assets/Tree/
+assets/Tree/*
+!assets/Tree/realistic_tree_models_for_games.glb
+!assets/Tree/tree_gn.glb
+!assets/Tree/petiolate_oak_tree.glb
 
 # Lokale Backups alter index-Varianten
 _alt/
