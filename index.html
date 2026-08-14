@@ -863,11 +863,13 @@ function himmelsRichtung(az,el){
 // Farbstufen nach Sonnenhoehe in Grad. Zwischen den Stufen wird weich geblendet.
 // star = wie deutlich die Sterne zu sehen sind, licht/umgeb = Farbe und Staerke
 // des gerichteten Lichts bzw. des Grundlichts.
+// Hinweis: nachts ist das Grundlicht bewusst heller, als es in echt waere.
+// Bei Neumond saehe man sonst gar nichts mehr und koennte nicht fahren.
 const HIMMEL=[
-  {el:-90, top:0x03050e, mid:0x070d1e, bot:0x101a33, fog:0x101a33, licht:0x9fb6e8, li:0.00, umgeb:0x8fa6d8, ui:0.30, star:1.00},
-  {el:-18, top:0x04071a, mid:0x0a142f, bot:0x172445, fog:0x172445, licht:0xa8bdf0, li:0.15, umgeb:0x93aade, ui:0.32, star:1.00},
-  {el:-10, top:0x081230, mid:0x18305c, bot:0x3a4a72, fog:0x33415f, licht:0xb9c8f0, li:0.30, umgeb:0x9fb2dd, ui:0.36, star:0.55},
-  {el:-4,  top:0x1a2c56, mid:0x4c4f80, bot:0x9c6a66, fog:0x7a6272, licht:0xffb98a, li:0.55, umgeb:0xa8a2c0, ui:0.45, star:0.18},
+  {el:-90, top:0x03050e, mid:0x070d1e, bot:0x101a33, fog:0x101a33, licht:0x9fb6e8, li:0.00, umgeb:0x9db2e0, ui:1.50, star:1.00},
+  {el:-18, top:0x04071a, mid:0x0a142f, bot:0x172445, fog:0x172445, licht:0xa8bdf0, li:0.15, umgeb:0xa0b5e2, ui:1.45, star:1.00},
+  {el:-10, top:0x081230, mid:0x18305c, bot:0x3a4a72, fog:0x33415f, licht:0xb9c8f0, li:0.30, umgeb:0xa6b8e0, ui:1.10, star:0.55},
+  {el:-4,  top:0x1a2c56, mid:0x4c4f80, bot:0x9c6a66, fog:0x7a6272, licht:0xffb98a, li:0.55, umgeb:0xa8a2c0, ui:0.70, star:0.18},
   {el:0,   top:0x24406e, mid:0x6d6494, bot:0xd4834f, fog:0xa87a70, licht:0xff9c5a, li:1.00, umgeb:0xc0b0bd, ui:0.50, star:0.05},
   {el:6,   top:0x2a5087, mid:0x8ea0c6, bot:0xefb07a, fog:0xd0aa9a, licht:0xffc78e, li:1.45, umgeb:0xd8d3d0, ui:0.55, star:0.00},
   {el:15,  top:0x2c5b93, mid:0x82b0e2, bot:0xe2d7bd, fog:0xd6dcd8, licht:0xfff0d6, li:1.70, umgeb:0xdcecff, ui:0.58, star:0.00},
@@ -943,6 +945,7 @@ const skyM=new THREE.ShaderMaterial({
 // Himmel, Sterne und Mond liegen in einer Gruppe, die der Kamera folgt.
 // So bleibt der Horizont immer gleich weit weg, egal wo auf der Strecke man ist.
 const skyGrp=new THREE.Group();
+skyGrp.userData.behalten=true;      // beim Streckenwechsel nicht abraeumen
 skyGrp.add(new THREE.Mesh(skyG,skyM));
 scene.add(skyGrp);
 
@@ -1095,8 +1098,9 @@ function updateSky(force){
   }else{
     dir=mDir.clone();
     farbe=new THREE.Color(0xbfd2ff);
-    // Mondlicht: nur wenn der Mond ueber dem Horizont steht, und je nach Phase
-    staerke=moonElDeg>0 ? 0.25+0.75*m.phase*Math.min(1,moonElDeg/25) : 0.12;
+    // Mondlicht: heller bei hohem Vollmond. Der Mindestwert sorgt dafuer, dass
+    // die Strecke auch bei Neumond oder untergegangenem Mond fahrbar bleibt.
+    staerke=moonElDeg>0 ? 0.95+0.60*m.phase*Math.min(1,moonElDeg/25) : 0.95;
   }
   // Das Licht darf nie von unten kommen, sonst liegt die Strecke im Dunkeln
   // und die Schatten zeigen nach oben.
@@ -1371,7 +1375,15 @@ function makeProceduralTree(h){
 }
 
 async function buildWorld(){
-  const rm=[];scene.traverse(o=>{if(o!==scene&&o!==sun&&!o.isLight&&!(o.geometry instanceof THREE.SphereGeometry))rm.push(o);});
+  // Alte Strecke abraeumen. Lichter und alles, was zum Himmel gehoert
+  // (Himmelskugel, Sterne, Sonne, Mond in skyGrp), muss stehen bleiben -
+  // sonst ist nach dem Streckenwechsel kein Himmel mehr da.
+  const rm=[];
+  scene.traverse(o=>{
+    if(o===scene||o===skyGrp||o===sun||o===sun.target||o.isLight)return;
+    if(o.userData.behalten)return;
+    rm.push(o);
+  });
   rm.forEach(o=>scene.remove(o));
 
   const def=TDEFS[selTrack];
