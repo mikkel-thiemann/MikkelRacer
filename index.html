@@ -93,6 +93,31 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 
 #s-finish h2{font-size:26px;font-weight:900;color:#C5141E}
 .fr{color:#ccc;font-size:14px;line-height:2.3;text-align:center}
+
+/* Verlauf / Karriere */
+.btn2{background:transparent;border:1.5px solid #444;color:#aaa;padding:9px 26px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.06em}
+.btn2:hover{border-color:#888;color:#fff}
+#h-title{font-size:26px;font-weight:900;color:#fff;letter-spacing:.04em}
+#h-sub{font-size:9px;color:#444;letter-spacing:.3em;margin-top:-6px}
+#h-stats{display:flex;gap:22px;color:#888;font-size:11px;letter-spacing:.08em;margin:2px 0 4px}
+#h-stats b{color:#fff;font-size:15px;font-weight:900;display:block;text-align:center}
+#h-filter{display:flex;gap:6px;margin-bottom:2px}
+.hf{padding:5px 13px;border-radius:5px;border:1.5px solid rgba(255,255,255,.1);font-size:11px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.04);color:#666}
+.hf:hover{color:#aaa}
+.hf.sel{border-color:#f5c518;color:#f5c518}
+.hf .hfc{color:#555;font-weight:400;margin-left:5px}
+.hf.sel .hfc{color:#f5c518;opacity:.7}
+#h-wrap{width:660px;max-height:52vh;overflow-y:auto;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.03)}
+#h-tab{width:100%;border-collapse:collapse;font-size:12px;color:#ddd}
+#h-tab th{position:sticky;top:0;background:#151515;color:#777;font-size:9px;letter-spacing:.12em;text-align:left;padding:8px;border-bottom:1px solid rgba(255,255,255,.12)}
+#h-tab td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05)}
+#h-tab tr:hover td{background:rgba(255,255,255,.04)}
+.hp{font-weight:900;width:34px}
+.hp.p1{color:#f5c518}.hp.p2{color:#c8c8c8}.hp.p3{color:#cd7f32}
+.hteam{display:flex;align-items:center;gap:7px;font-weight:700;text-transform:uppercase}
+.hdot{width:9px;height:9px;border-radius:2px;flex:none}
+.hdim{color:#777}
+#h-empty{color:#666;font-size:13px;padding:26px;text-align:center}
 </style>
 </head>
 <body>
@@ -108,6 +133,25 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
   <div class="gtitle">RACER<span>X</span></div>
   <div class="gsub">6 TEAMS · 3 STRECKEN · 5 KAMERAS</div>
   <button class="go-btn" id="btn-to-team" style="margin-top:10px">TEAM WÄHLEN →</button>
+  <button class="btn2" id="btn-to-hist">📊 MEINE ERGEBNISSE</button>
+</div>
+
+<div class="screen" id="s-hist">
+  <div id="h-title">MEINE ERGEBNISSE</div>
+  <div id="h-sub">KARRIERE-VERLAUF</div>
+  <div id="h-stats"></div>
+  <div id="h-filter"></div>
+  <div id="h-wrap">
+    <table id="h-tab">
+      <thead><tr><th>P</th><th>TEAM</th><th>STRECKE</th><th>ZEIT</th><th>BESTE RUNDE</th><th>WANN</th></tr></thead>
+      <tbody id="h-body"></tbody>
+    </table>
+    <div id="h-empty" style="display:none">Noch keine Rennen gefahren.</div>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:6px">
+    <button class="go-btn" id="btn-hist-back">← ZURÜCK</button>
+    <button class="btn2" id="btn-hist-clear">VERLAUF LÖSCHEN</button>
+  </div>
 </div>
 
 <div class="screen" id="s-team">
@@ -127,6 +171,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
   <h2>RACE FINISHED!</h2>
   <div class="fr" id="fin-r"></div>
   <button class="go-btn" id="btn-again" style="margin-top:6px">NOCHMAL</button>
+  <button class="btn2" id="btn-fin-hist">📊 MEINE ERGEBNISSE</button>
 </div>
 
 <canvas id="cv"></canvas>
@@ -230,9 +275,33 @@ const TEAMS=[
   {n:'ATOMIKS',  s:'ATOMIKS',  body:0x080808,b2:0x0a1428,halo:0x080808,nose:0x080808,rim:0xE8CC00,tc:'#1a88ff',c1:'#080808',c2:'#1a4488'},
 ];
 
+const TRACK_NAMES=['📐 L-Strecke','🇮🇹 Monza','🔄 Großer G-Track'];
+
 const TDEFS=[
   {pts:[[-20.0,0,-35.0],[-20.0,0,-20.0],[-20.0,0,0.0],[-20.0,0,15.0],[-18.0,0,18.0],[-15.0,0,20.0],[-10.0,0,20.0],[0.0,0,20.0],[10.0,0,20.0],[15.0,0,20.0],[18.0,0,18.0],[20.0,0,15.0],[20.0,0,10.0],[20.0,0,5.0],[18.0,0,2.0],[15.0,0,0.0],[10.0,0,0.0],[5.0,0,0.0],[2.0,0,-2.0],[0.0,0,-5.0],[0.0,0,-15.0],[0.0,0,-25.0],[0.0,0,-35.0],[-2.0,0,-38.0],[-5.0,0,-40.0],[-10.0,0,-40.0],[-15.0,0,-40.0],[-18.0,0,-38.0]],w:17.6},
-  {pts:[[0,0,0],[-5,0,0],[-12,0,-1],[-20,0,-2],[-28,0,-3],[-32,0,-7],[-35,0,-13],[-33,0,-19],[-27,0,-22],[-21,0,-20],[-17,0,-24],[-13,0,-30],[-10,0,-38],[-8,0,-48],[-6,0,-58],[-4,0,-68],[-1,0,-76],[4,0,-82],[9,0,-84],[14,0,-82],[17,0,-76],[16,0,-70],[12,0,-66],[7,0,-65],[3,0,-68],[-1,0,-74],[-5,0,-80],[-10,0,-82],[-14,0,-80],[-16,0,-74],[-14,0,-66],[-10,0,-58],[-6,0,-50],[-2,0,-44],[2,0,-40],[6,0,-38],[10,0,-40],[12,0,-46],[8,0,-52],[6,0,-58],[9,0,-62],[15,0,-65],[22,0,-65],[28,0,-62],[31,0,-55],[31,0,-46],[28,0,-38],[22,0,-32],[14,0,-26],[8,0,-18],[4,0,-10]],w:19.6},
+  // Monza (Autodromo Nazionale) - Nachbau des echten Streckenverlaufs
+  {pts:[
+    // Rettifilo Tribune: Start/Ziel-Gerade
+    [-12,0,26],[-12,0,16],[-12,0,6],[-12,0,-6],[-12,0,-18],[-12,0,-28],
+    // Variante del Rettifilo (T1-T2), enge Rechts-Links-Schikane
+    [-11.5,0,-34],[-9,0,-38],[-8,0,-42],[-10,0,-46],[-10.5,0,-51],
+    // Curva Grande, langer schneller Rechtsbogen
+    [-9,0,-57],[-6,0,-63],[-1,0,-68],[6,0,-71],[13,0,-71],[19,0,-68],[23,0,-63],
+    // Variante della Roggia (T4-T5), Links-Rechts-Schikane
+    [24,0,-58],[22,0,-54],[23,0,-50],[26,0,-47],[27,0,-43],
+    // Curva di Lesmo 1 (T6)
+    [27,0,-39],[26,0,-35],[24,0,-32],
+    // Curva di Lesmo 2 (T7)
+    [21,0,-30],[18,0,-29],
+    // Serraglio
+    [14,0,-29],[10,0,-28],
+    // Variante Ascari (T8-T9-T10)
+    [7,0,-27],[4,0,-25],[4,0,-21],[7,0,-19],[8,0,-15],
+    // Rettifilo Centro: Gegengerade
+    [8,0,-6],[8,0,4],[8,0,13],[8,0,20],
+    // Parabolica (Curva Alboreto), langer Rechtsbogen zurueck auf die Gerade
+    [8,0,25],[6,0,30],[2,0,33],[-3,0,34],[-8,0,32],[-11,0,29]
+  ],w:19.6},
   {pts:[[0,0,0],[-18,0,0],[-36,0,-18],[-36,0,-54],[-18,0,-72],[18,0,-72],[36,0,-54],[36,0,-18],[18,0,-18],[18,0,-36],[0,0,-36],[0,0,-54],[-9,0,-54],[-18,0,-45],[-18,0,-27],[-9,0,-9]],w:18.6}
 ];
 
@@ -435,7 +504,7 @@ function nextCam(){
 }
 
 function showOnly(id){
-  ['s-name','s-menu','s-team','s-finish'].forEach(s=>{
+  ['s-name','s-menu','s-team','s-finish','s-hist'].forEach(s=>{
     const el = document.getElementById(s);
     if (el) el.style.display=s===id?'flex':'none';
   });
@@ -445,6 +514,86 @@ showOnly('s-name');
 document.getElementById('btn-to-team').onclick=()=>{showOnly('s-team');buildTeamSel();};
 document.getElementById('btn-start').onclick=()=>{showOnly(null);Engine.arm();startRace();};
 document.getElementById('btn-again').onclick=()=>{Engine.stop();showOnly('s-team');gs='menu';};
+
+// === Ergebnis-Verlauf (pro Account im localStorage) =========================
+let histFrom='s-menu';
+let histTrack=null;          // null = alle Strecken, sonst Streckenname
+const histKey=()=>'racerX_hist_'+(playerName||'_');
+
+function loadHist(){
+  try{const a=JSON.parse(localStorage.getItem(histKey()));return Array.isArray(a)?a:[];}
+  catch(e){return [];}
+}
+
+function saveResult(r){
+  const h=loadHist();
+  h.unshift(r);                       // neuestes Rennen zuoberst
+  localStorage.setItem(histKey(),JSON.stringify(h.slice(0,100)));
+}
+
+function fmtDate(ts){
+  const d=new Date(ts);
+  const p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+
+function buildFilter(all){
+  const f=document.getElementById('h-filter');f.innerHTML='';
+  // "ALLE" + eine Taste pro Strecke; die Zahl zeigt, wie viele Rennen dort gefahren wurden
+  const opts=[{k:null,nm:'ALLE',c:all.length},
+    ...TRACK_NAMES.map(nm=>({k:nm,nm,c:all.filter(r=>r.track===nm).length}))];
+  opts.forEach(o=>{
+    const b=document.createElement('button');
+    b.className='hf'+(histTrack===o.k?' sel':'');
+    b.innerHTML=o.nm+`<span class="hfc">${o.c}</span>`;
+    b.onclick=()=>{histTrack=o.k;buildHist();};
+    f.appendChild(b);
+  });
+}
+
+function buildHist(){
+  const all=loadHist();
+  const h=histTrack?all.filter(r=>r.track===histTrack):all;
+  const body=document.getElementById('h-body');
+  document.getElementById('h-title').textContent=(playerName||'DU').toUpperCase();
+  buildFilter(all);
+  const emp=document.getElementById('h-empty');
+  emp.style.display=h.length?'none':'block';
+  emp.textContent=all.length?'Auf dieser Strecke noch kein Rennen gefahren.':'Noch keine Rennen gefahren.';
+  document.getElementById('h-tab').style.display=h.length?'':'none';
+  const wins=h.filter(r=>r.pos===1).length;
+  const podium=h.filter(r=>r.pos<=3).length;
+  const avg=h.length?(h.reduce((s,r)=>s+r.pos,0)/h.length).toFixed(1):'--';
+  const best=h.reduce((b,r)=>(b===null||r.pos<b)?r.pos:b,null);
+  document.getElementById('h-stats').innerHTML=
+    `<div><b>${h.length}</b>RENNEN</div><div><b>${wins}</b>SIEGE</div>`+
+    `<div><b>${podium}</b>PODEST</div><div><b>${avg}</b>Ø PLATZ</div>`+
+    `<div><b>${best?'P'+best:'--'}</b>BESTE</div>`;
+  body.innerHTML=h.map(r=>{
+    const t=TEAMS.find(x=>x.n===r.team)||TEAMS[0];
+    return `<tr>
+      <td class="hp p${r.pos}">P${r.pos}</td>
+      <td><div class="hteam"><span class="hdot" style="background:${t.tc}"></span>${r.team}</div></td>
+      <td>${r.track}</td>
+      <td>${r.time}</td>
+      <td class="hdim">${r.best}</td>
+      <td class="hdim">${fmtDate(r.ts)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function openHist(from){histFrom=from;showOnly('s-hist');buildHist();}
+document.getElementById('btn-to-hist').onclick=()=>openHist('s-menu');
+document.getElementById('btn-fin-hist').onclick=()=>openHist('s-finish');
+document.getElementById('btn-hist-back').onclick=()=>{
+  showOnly(histFrom);
+  if(histFrom==='s-team')buildTeamSel();
+};
+document.getElementById('btn-hist-clear').onclick=()=>{
+  if(!confirm('Wirklich alle Ergebnisse von '+(playerName||'DU')+' löschen?'))return;
+  localStorage.removeItem(histKey());
+  buildHist();
+};
 
 function carSVG(t){
   return`<svg viewBox="0 0 180 50">
@@ -470,7 +619,7 @@ function buildTeamSel(){
     g.appendChild(c);
   });
   const tr=document.getElementById('trk-row');tr.innerHTML='';
-  ['📐 L-Strecke','🇮🇹 Monza','🔄 Großer G-Track'].forEach((nm,i)=>{
+  TRACK_NAMES.forEach((nm,i)=>{
     const b=document.createElement('button');b.className='trk'+(i===selTrack?' sel':'');b.textContent=nm;
     b.onclick=()=>{selTrack=i;[...tr.children].forEach(x=>x.classList.remove('sel'));b.classList.add('sel');};
     tr.appendChild(b);
@@ -486,12 +635,39 @@ scene.fog=new THREE.Fog(0xcde6f7,80*TRACK_SCALE,800*TRACK_SCALE);
 const cam3=new THREE.PerspectiveCamera(60,VW/VH,0.1,500*TRACK_SCALE);
 
 scene.add(new THREE.AmbientLight(0xdcf0ff,0.6));
+// Sonnenstand: Richtung und Hoehe frei einstellbar.
+// SUN_AZIMUTH_DEG dreht die Sonne um die Strecke (0/90/180/270 = vier Seiten),
+// SUN_ELEV_DEG ist die Hoehe ueber dem Horizont (klein = langer Schatten).
+const SUN_AZIMUTH_DEG=135;
+const SUN_ELEV_DEG=45;
 const sun=new THREE.DirectionalLight(0xffeedd,1.8);
 sun.position.set(80*TRACK_SCALE,130*TRACK_SCALE,60*TRACK_SCALE);sun.castShadow=true;
-sun.shadow.mapSize.width=1024;sun.shadow.mapSize.height=1024;
-sun.shadow.camera.near=1;sun.shadow.camera.far=400*TRACK_SCALE;
-sun.shadow.camera.left=-200*TRACK_SCALE;sun.shadow.camera.right=200*TRACK_SCALE;
-sun.shadow.camera.top=200*TRACK_SCALE;sun.shadow.camera.bottom=-200*TRACK_SCALE;
+sun.shadow.mapSize.width=2048;sun.shadow.mapSize.height=2048;
+sun.shadow.bias=-0.0006;
+// Die genaue Ausrichtung und der Schattenbereich werden je Strecke in aimSun() gesetzt.
+
+// Sonne auf die Streckenmitte ausrichten und den Schattenbereich eng zuschneiden.
+// Ohne das zielt das Licht auf den Weltnullpunkt, der weit neben der Strecke liegen kann,
+// und die Schattenkarte verteilt sich auf eine viel zu grosse Flaeche.
+function aimSun(){
+  const box=new THREE.Box3();
+  TF.forEach(f=>box.expandByPoint(f.pos));
+  const ctr=new THREE.Vector3(),size=new THREE.Vector3();
+  box.getCenter(ctr);box.getSize(size);
+  const radius=Math.max(size.x,size.z)*0.5+60;      // Reserve fuer Baeume/Tribuene
+  const dist=radius*2.4;
+  const az=THREE.MathUtils.degToRad(SUN_AZIMUTH_DEG);
+  const el=THREE.MathUtils.degToRad(SUN_ELEV_DEG);
+  const ch=Math.cos(el);
+  sun.position.set(ctr.x+ch*Math.sin(az)*dist, ctr.y+Math.sin(el)*dist, ctr.z+ch*Math.cos(az)*dist);
+  sun.target.position.copy(ctr);
+  sun.target.updateMatrixWorld();
+  if(!sun.target.parent)scene.add(sun.target);
+  const sc=sun.shadow.camera;
+  sc.left=-radius;sc.right=radius;sc.top=radius;sc.bottom=-radius;
+  sc.near=1;sc.far=dist*2.2;
+  sc.updateProjectionMatrix();
+}
 scene.add(sun);
 
 const skyG=new THREE.SphereGeometry(SKY_R,32,16);
@@ -629,6 +805,124 @@ async function getCarModel(teamData) {
   }
 }
 
+// === Baummodelle aus assets/Tree: einmalig laden, fuer Instancing aufbereiten ===
+// Gewichte nach Polygonzahl: die leichte Kiefer ueberwiegt, damit viele Baeume
+// moeglich bleiben; die schwereren Modelle sorgen fuer Abwechslung.
+// w = Haeufigkeit, b = Aufhellung je Modell (0 = unveraendert),
+// s = wie tief der Stammfuss in der Erde steckt (Anteil der Baumhoehe).
+// Die Tanne ist von Haus aus sehr dunkel und bekommt darum deutlich mehr Aufhellung.
+const TREE_FILES=[
+  {f:'realistic_tree_models_for_games.glb', w:0.44, b:0.30, s:0.05},
+  {f:'tree_gn.glb',                         w:0.32, b:0.30, s:0.05},
+  {f:'petiolate_oak_tree.glb',              w:0.24, b:0.30, s:0.06},
+];
+const TREE_SINK=0.05;   // Vorgabe, falls ein Modell keinen eigenen Wert hat
+let treeModels=null, treeLoadTried=false;
+
+async function loadTreeModels(){
+  if(treeLoadTried)return treeModels;
+  treeLoadTried=true;
+  const loader=new GLTFLoader(), out=[];
+  for(const t of TREE_FILES){
+    try{
+      const gltf=await loader.loadAsync('assets/Tree/'+t.f);
+      // Huelle, damit die Normierung unabhaengig von der eigenen Transformation ist
+      const holder=new THREE.Group();holder.add(gltf.scene);holder.updateMatrixWorld(true);
+      const box=new THREE.Box3().setFromObject(holder);
+      const size=new THREE.Vector3();box.getSize(size);
+      const ctr=new THREE.Vector3();box.getCenter(ctr);
+      const sc=size.y>1e-6?1/size.y:1;                 // auf Hoehe 1 normieren
+      holder.scale.setScalar(sc);
+      holder.position.set(-ctr.x*sc,-box.min.y*sc,-ctr.z*sc);  // Fuss auf y=0, in XZ zentriert
+      holder.updateMatrixWorld(true);
+
+      const parts=[];
+      holder.traverse(o=>{
+        if(!o.isMesh||!o.geometry)return;
+        const g=o.geometry.clone();
+        g.applyMatrix4(o.matrixWorld);                 // Transformation in die Geometrie backen
+        (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{
+          if(!m)return;
+          m.side=THREE.DoubleSide;                     // Blattflaechen von beiden Seiten sichtbar
+          if(m.transparent){m.transparent=false;m.alphaTest=Math.max(m.alphaTest||0,0.35);}
+          // Aufhellen; Materialien koennen von mehreren Meshes geteilt werden -> nur einmal
+          const br=t.b||0;
+          if(br>0&&!m.__brightened){
+            m.__brightened=true;
+            // 1. Grundhelligkeit anheben - wirkt auch bei dunklen Texturen,
+            //    da color als Faktor auf die Textur wirkt (Werte >1 sind erlaubt)
+            if(m.color)m.color.multiplyScalar(1+br*0.9);
+            // 2. leichtes Eigenleuchten in der eigenen Farbe/Textur
+            if(m.emissive){
+              m.emissive.copy(m.color||new THREE.Color(0xffffff));
+              if(m.map)m.emissiveMap=m.map;
+              m.emissiveIntensity=br*0.5;
+            }
+            // 3. etwas weniger rau -> faengt mehr Licht ein
+            if(m.roughness!==undefined)m.roughness=Math.min(m.roughness,0.85);
+          }
+          m.needsUpdate=true;
+        });
+        parts.push({geo:g,mat:o.material});
+      });
+      if(parts.length)out.push({parts,w:t.w,s:(t.s!==undefined?t.s:TREE_SINK)});
+    }catch(e){ console.warn('Baummodell nicht ladbar:',t.f,e.message); }
+  }
+  treeModels=out.length?out:null;
+  if(!treeModels)console.warn('Keine Baummodelle geladen - nutze einfache Baeume.');
+  return treeModels;
+}
+
+// Einfacher Baum als Reserve, falls die Modelle fehlen
+function makeProceduralTree(h){
+  const tGrp=new THREE.Group(), treeType=Math.random();
+  if(Math.random()>0.65){
+    const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(0.4+Math.random()*0.8,0),
+      new THREE.MeshStandardMaterial({color:0x5a5d64,roughness:0.85}));
+    rock.position.set((Math.random()-0.5)*2.5,0.1,(Math.random()-0.5)*2.5);
+    rock.scale.set(1.2,0.5+Math.random()*0.6,0.9);
+    rock.castShadow=true;rock.receiveShadow=true;tGrp.add(rock);
+  }
+  if(treeType<0.4){
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.5,h*0.25,7),
+      new THREE.MeshStandardMaterial({color:0x2c1a10,roughness:0.95}));
+    trunk.position.y=(h*0.25)/2;trunk.castShadow=true;tGrp.add(trunk);
+    const baseGreen=new THREE.Color(0x15331b).multiplyScalar(0.85+Math.random()*0.3);
+    for(let l=0;l<5;l++){
+      const layerH=h*0.32*(1-l*0.14), layerW=(h*0.3)*(1-l*0.18);
+      const cone=new THREE.Mesh(new THREE.ConeGeometry(layerW,layerH,8),
+        new THREE.MeshStandardMaterial({color:baseGreen.clone().multiplyScalar(1+l*0.06),roughness:0.85}));
+      cone.position.y=h*0.22+(l*h*0.14)+layerH/2;
+      cone.castShadow=true;cone.receiveShadow=true;tGrp.add(cone);
+    }
+  }else if(treeType<0.75){
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.7,h*0.38,8),
+      new THREE.MeshStandardMaterial({color:0x3d2b1f,roughness:0.9}));
+    trunk.position.y=(h*0.38)/2;trunk.castShadow=true;tGrp.add(trunk);
+    const leafMat=new THREE.MeshStandardMaterial({
+      color:new THREE.Color(0x2d5a27).multiplyScalar(0.8+Math.random()*0.3),roughness:0.9,metalness:0.05});
+    for(let k=0;k<6;k++){
+      const sSize=(h*0.22)*(0.85+Math.random()*0.3);
+      const sph=new THREE.Mesh(new THREE.DodecahedronGeometry(sSize,1),leafMat);
+      sph.position.set((Math.random()-0.5)*h*0.22, h*0.35+Math.random()*h*0.32, (Math.random()-0.5)*h*0.22);
+      sph.scale.set(1.1,0.9+Math.random()*0.3,1.0);
+      sph.castShadow=true;sph.receiveShadow=true;tGrp.add(sph);
+    }
+  }else{
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.45,h*0.3,6),
+      new THREE.MeshStandardMaterial({color:0x443a35,roughness:0.95}));
+    trunk.position.y=(h*0.3)/2;trunk.castShadow=true;tGrp.add(trunk);
+    const crownW=h*0.18, crownH=h*0.75;
+    const crown=new THREE.Mesh(new THREE.CylinderGeometry(0.1,crownW,crownH,8),
+      new THREE.MeshStandardMaterial({color:new THREE.Color(0x3c662d).multiplyScalar(0.85+Math.random()*0.25),roughness:0.88}));
+    crown.position.y=h*0.3+crownH/2;crown.scale.set(1,1,0.85);
+    crown.castShadow=true;crown.receiveShadow=true;tGrp.add(crown);
+  }
+  tGrp.rotation.x=(Math.random()-0.5)*0.08;
+  tGrp.rotation.z=(Math.random()-0.5)*0.08;
+  return tGrp;
+}
+
 async function buildWorld(){
   const rm=[];scene.traverse(o=>{if(o!==scene&&o!==sun&&!o.isLight&&!(o.geometry instanceof THREE.SphereGeometry))rm.push(o);});
   rm.forEach(o=>scene.remove(o));
@@ -643,6 +937,7 @@ async function buildWorld(){
     const t=i/N,pos=TC.getPoint(t),tan=TC.getTangent(t).normalize();
     TF.push({pos,tan,right:new THREE.Vector3().crossVectors(tan,new THREE.Vector3(0,1,0)).normalize()});
   }
+  aimSun();          // Licht auf diese Strecke ausrichten
   const rw=def.w,rv=[],ru=[],ri=[],le=[],re=[];
   for(let i=0;i<=N;i++){
     const{pos,right}=TF[i];
@@ -798,95 +1093,61 @@ async function buildWorld(){
     sq.position.copy(TC.getPoint(0));sq.position.addScaledVector(TF[0].right,(-rw/2)+(i+.5)*(rw/10));sq.position.y=.04;scene.add(sq);
   }
 
+  // === Baeume: Plaetze sammeln, dann als 3D-Modelle instanzieren ===
+  const treeSpots=[];
   for(let i=0;i<N;i+=3){
     const{pos,right}=TF[i];
     [-1,1].forEach(s=>{
-      if(Math.random() > 0.15) {
-        const offset = rw/2 + 5 + Math.random()*30;
-        const tx=pos.x+right.x*s*offset, tz=pos.z+right.z*s*offset;
-        if(inGrandstand(tx,tz,3))return;   // Platz gehoert zur Tribuene
-        const h=10+Math.random()*16;
-        const tGrp = new THREE.Group();
-        const treeType = Math.random();
+      if(Math.random()<=0.15)return;
+      const offset = rw/2 + 5 + Math.random()*30;
+      const tx=pos.x+right.x*s*offset, tz=pos.z+right.z*s*offset;
+      if(inGrandstand(tx,tz,3))return;   // Platz gehoert zur Tribuene
+      treeSpots.push([tx,pos.y,tz]);
+    });
+  }
 
-        if(Math.random() > 0.65) {
-          const rockMat = new THREE.MeshStandardMaterial({color: 0x5a5d64, roughness: 0.85});
-          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4 + Math.random()*0.8, 0), rockMat);
-          rock.position.set((Math.random()-0.5)*2.5, 0.1, (Math.random()-0.5)*2.5);
-          rock.scale.set(1.2, 0.5 + Math.random()*0.6, 0.9);
-          rock.castShadow = true; rock.receiveShadow = true;
-          tGrp.add(rock);
-        }
-
-        if(treeType < 0.4) {
-          const trunkMat = new THREE.MeshStandardMaterial({color:0x2c1a10, roughness:0.95});
-          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.5, h*0.25, 7), trunkMat);
-          trunk.position.y = (h*0.25)/2; trunk.castShadow=true; tGrp.add(trunk);
-
-          const baseGreen = new THREE.Color(0x15331b).multiplyScalar(0.85 + Math.random()*0.3);
-          const layers = 5;
-          for(let l=0; l<layers; l++) {
-            const leafMat = new THREE.MeshStandardMaterial({
-              color: baseGreen.clone().multiplyScalar(1.0 + l*0.06),
-              roughness: 0.85
-            });
-            const layerH = h * 0.32 * (1 - l*0.14);
-            const layerW = (h * 0.3) * (1 - l*0.18);
-            const cone = new THREE.Mesh(new THREE.ConeGeometry(layerW, layerH, 8), leafMat);
-            cone.position.y = h*0.22 + (l * h * 0.14) + layerH/2;
-            cone.castShadow = true; cone.receiveShadow = true;
-            tGrp.add(cone);
-          }
-        } else if(treeType < 0.75) {
-          const trunkMat = new THREE.MeshStandardMaterial({color:0x3d2b1f, roughness:0.9});
-          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.7, h*0.38, 8), trunkMat);
-          trunk.position.y = (h*0.38)/2; trunk.castShadow=true; tGrp.add(trunk);
-
-          const leafMat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(0x2d5a27).multiplyScalar(0.8 + Math.random()*0.3),
-            roughness: 0.9,
-            metalness: 0.05
-          });
-
-          const numSpheres = 6;
-          for(let k=0; k<numSpheres; k++) {
-            const sSize = (h*0.22) * (0.85 + Math.random()*0.3);
-            const sph = new THREE.Mesh(new THREE.DodecahedronGeometry(sSize, 1), leafMat);
-            sph.position.set(
-              (Math.random()-0.5) * h * 0.22,
-              h*0.35 + (Math.random()*h*0.32),
-              (Math.random()-0.5) * h * 0.22
-            );
-            sph.scale.set(1.1, 0.9 + Math.random()*0.3, 1.0);
-            sph.castShadow = true; sph.receiveShadow = true;
-            tGrp.add(sph);
-          }
-        } else {
-          const trunkMat = new THREE.MeshStandardMaterial({color:0x443a35, roughness:0.95});
-          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.45, h*0.3, 6), trunkMat);
-          trunk.position.y = (h*0.3)/2; trunk.castShadow=true; tGrp.add(trunk);
-
-          const leafMat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(0x3c662d).multiplyScalar(0.85 + Math.random()*0.25),
-            roughness: 0.88
-          });
-          const crownW = h * 0.18;
-          const crownH = h * 0.75;
-          const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.1, crownW, crownH, 8), leafMat);
-          crown.position.y = h*0.3 + crownH/2;
-          crown.scale.set(1, 1, 0.85);
-          crown.castShadow = true; crown.receiveShadow = true;
-          tGrp.add(crown);
-        }
-
-        tGrp.position.set(tx, pos.y, tz);
-
-        tGrp.rotation.y = Math.random() * Math.PI * 2;
-        tGrp.rotation.x = (Math.random() - 0.5) * 0.08;
-        tGrp.rotation.z = (Math.random() - 0.5) * 0.08;
-
-        scene.add(tGrp);
-      }
+  const tModels=await loadTreeModels();
+  if(tModels){
+    // Plaetze nach Gewicht auf die Baumtypen verteilen
+    const buckets=tModels.map(()=>[]);
+    const wsum=tModels.reduce((a,m)=>a+m.w,0);
+    treeSpots.forEach(sp=>{
+      let r=Math.random()*wsum,k=0;
+      while(k<tModels.length-1&&(r-=tModels[k].w)>0)k++;
+      buckets[k].push(sp);
+    });
+    const mtx=new THREE.Matrix4(),qt=new THREE.Quaternion(),
+          vP=new THREE.Vector3(),vS=new THREE.Vector3(),axY=new THREE.Vector3(0,1,0);
+    tModels.forEach((m,mi)=>{
+      const list=buckets[mi];
+      if(!list.length)return;
+      // je Teilgeometrie (Stamm, Blattwerk, ...) ein InstancedMesh = ein Zeichenaufruf
+      const meshes=m.parts.map(p=>{
+        const im=new THREE.InstancedMesh(p.geo,p.mat,list.length);
+        im.castShadow=false;      // Schattenwurf waere bei dieser Polygonzahl teuer
+        im.receiveShadow=true;
+        return im;
+      });
+      const sink=m.s!==undefined?m.s:TREE_SINK;
+      list.forEach(([tx,ty,tz],k)=>{
+        const h=10+Math.random()*16;                  // Baumhoehe wie zuvor
+        const wob=0.88+Math.random()*0.24;            // leichte Breitenvariation
+        // Stammfuss unter die Erde setzen, damit keine Wurzeln frei stehen
+        vP.set(tx,ty-h*sink,tz);
+        qt.setFromAxisAngle(axY,Math.random()*Math.PI*2);
+        vS.set(h*wob,h,h*wob);
+        mtx.compose(vP,qt,vS);
+        meshes.forEach(im=>im.setMatrixAt(k,mtx));
+      });
+      meshes.forEach(im=>{im.instanceMatrix.needsUpdate=true;scene.add(im);});
+    });
+  }else{
+    treeSpots.forEach(([tx,ty,tz])=>{
+      const h=10+Math.random()*16;
+      const t=makeProceduralTree(h);
+      t.position.set(tx,ty-h*TREE_SINK,tz);   // Stammfuss unter die Erde
+      t.rotation.y=Math.random()*Math.PI*2;
+      scene.add(t);
     });
   }
 
@@ -1243,6 +1504,8 @@ function updateHUD(ts){
   const rp=PL.spd/MV;circ('cMph',rp,rp>.88?TEAMS[selTeam].tc:rp>.65?'#ffaa00':'#00ff55', false);
   if(PL.done&&!gOv){gOv=true;Engine.stop();
     const finalPos=AI.filter(c=>c.done&&c.ft<PL.ft).length+1;
+    saveResult({ts:Date.now(),team:TEAMS[selTeam].n,track:TRACK_NAMES[selTrack],
+      pos:finalPos,of:all.length,time:fmt(PL.ft),best:PL.bl<Infinity?fmt(PL.bl):'--'});
     setTimeout(()=>{showOnly('s-finish');document.getElementById('fin-r').innerHTML=`P${finalPos} von ${all.length}!<br>Zeit: <b>${fmt(PL.ft)}</b><br>Beste Runde: <b style="color:${TEAMS[selTeam].tc}">${PL.bl<Infinity?fmt(PL.bl):'--'}</b>`;},1200);}
 }
 
