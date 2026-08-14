@@ -243,47 +243,141 @@ let selTeam=0,selTrack=0,camMode=0,gs='menu';
 const CAMS=['T-CAM','VERFOLGUNG','COCKPIT','TV-CAM','TOP-DOWN'];
 const K={u:false,d:false,l:false,r:false};
 
-// === Motorensound (WebAudio, komplett synthetisiert, keine externen Dateien) ===
+// === Motorensound: echte Aufnahme (assets/f1-honda.mp3), Synth als Reserve ===
 const Engine=(()=>{
-  let ctx=null,master=null,lpf=null,osc1,osc2,sub,noiseGain;
-  let running=false,muted=false;const VOL=0.16;
+  const SAMPLE_URL='assets/f1-honda.mp3';
+  const VOL=0.40, SYNTH_VOL=0.16;
+  let ctx=null,master=null;
+  let synthBus=null,lpf=null,osc1,osc2,sub,noiseGain;
+  let sampleBuf=null,sampleSrc=null,sampleBus=null,sampleLpf=null;
+  let running=false,muted=false,useSample=false;
+
   function build(){
     if(ctx)return;
     const AC=window.AudioContext||window.webkitAudioContext;
     if(!AC)return;
     ctx=new AC();
     master=ctx.createGain();master.gain.value=0;master.connect(ctx.destination);
-    lpf=ctx.createBiquadFilter();lpf.type='lowpass';lpf.frequency.value=900;lpf.Q.value=7;lpf.connect(master);
+
+    // --- Synth-Kette (Reserve, falls die Datei fehlt) ---
+    synthBus=ctx.createGain();synthBus.gain.value=1;synthBus.connect(master);
+    lpf=ctx.createBiquadFilter();lpf.type='lowpass';lpf.frequency.value=900;lpf.Q.value=7;lpf.connect(synthBus);
     osc1=ctx.createOscillator();osc1.type='sawtooth';
     osc2=ctx.createOscillator();osc2.type='sawtooth';osc2.detune.value=14;
     sub =ctx.createOscillator();sub.type='square';
     const g1=ctx.createGain();g1.gain.value=0.5;osc1.connect(g1).connect(lpf);
     const g2=ctx.createGain();g2.gain.value=0.32;osc2.connect(g2).connect(lpf);
     const gs=ctx.createGain();gs.gain.value=0.22;sub.connect(gs).connect(lpf);
-    // Rauschen fuer "Grit"/Ansaug-Textur
     const n=ctx.sampleRate*2,buf=ctx.createBuffer(1,n,ctx.sampleRate),d=buf.getChannelData(0);
     for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
     const nsrc=ctx.createBufferSource();nsrc.buffer=buf;nsrc.loop=true;
     const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.value=1200;nf.Q.value=0.6;
     noiseGain=ctx.createGain();noiseGain.gain.value=0;
-    nsrc.connect(nf).connect(noiseGain).connect(master);
+    nsrc.connect(nf).connect(noiseGain).connect(synthBus);
     osc1.start();osc2.start();sub.start();nsrc.start();
+
+    // --- Kette fuer die Aufnahme ---
+    sampleBus=ctx.createGain();sampleBus.gain.value=0;
+    sampleLpf=ctx.createBiquadFilter();sampleLpf.type='lowpass';
+    sampleLpf.frequency.value=6000;sampleLpf.Q.value=0.7;
+    sampleLpf.connect(sampleBus).connect(master);
   }
-  function arm(){build();if(ctx&&ctx.state==='suspended')ctx.resume();}
+
+  // MP3s haben Fuellmaterial am Anfang/Ende -> beim Schleifen entstehen Luecken.
+  // Darum: lauteste zusammenhaengende Passage waehlen und die Naht ueberblenden.
+  function prepareLoop(buf){
+    const sr=buf.sampleRate, ch=buf.numberOfChannels;
+    const data=[];for(let c=0;c<ch;c++)data.push(buf.getChannelData(c));
+
+    // Lautstaerke in 20-ms-Bloecken messen
+    const B=Math.max(1,Math.floor(sr*0.02));
+    const nB=Math.floor(buf.length/B);
+    if(nB<4)return buf;
+    const rms=new Float32Array(nB);
+    for(let b=0;b<nB;b++){
+      let sum=0;
+      for(let i=0;i<B;i++){
+        let v=0;for(let c=0;c<ch;c++)v+=data[c][b*B+i];
+        v/=ch;sum+=v*v;
+      }
+      rms[b]=Math.sqrt(sum/B);
+    }
+
+    // gleitendes Fenster: lauteste Passage finden (ueberspringt Stille und leise Stellen)
+    const winB=Math.max(1,Math.min(nB,Math.floor(Math.min(4,buf.duration*0.8)*sr/B)));
+    let acc=0;for(let b=0;b<winB;b++)acc+=rms[b];
+    let best=acc,bestB=0;
+    for(let b=winB;b<nB;b++){acc+=rms[b]-rms[b-winB];if(acc>best){best=acc;bestB=b-winB+1;}}
+
+    const s0=bestB*B;
+    const len=Math.min(winB*B,buf.length-s0);
+    const XF=Math.min(Math.floor(sr*0.15),Math.floor(len/4));   // Ueberblendung an der Naht
+    if(len<sr*0.5||XF<1)return buf;
+    const outLen=len-XF;
+
+    const out=ctx.createBuffer(ch,outLen,sr);
+    for(let c=0;c<ch;c++){
+      const src=data[c],dst=out.getChannelData(c);
+      for(let i=0;i<outLen;i++)dst[i]=src[s0+i];
+      for(let i=0;i<XF;i++){                    // Ende weich in den Anfang blenden
+        const f=i/XF;
+        dst[i]=dst[i]*f+src[s0+outLen+i]*(1-f);
+      }
+    }
+    return out;
+  }
+
+  async function loadSample(){
+    if(!ctx||sampleBuf)return;
+    try{
+      const r=await fetch(SAMPLE_URL);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const raw=await ctx.decodeAudioData(await r.arrayBuffer());
+      sampleBuf=prepareLoop(raw);
+      useSample=true;
+    }catch(e){
+      useSample=false;
+      console.warn('Motorensound-Datei nicht ladbar, nutze Synth:',e.message);
+    }
+  }
+
+  function arm(){build();if(ctx&&ctx.state==='suspended')ctx.resume();loadSample();}
+
   function start(){
     build();if(!ctx)return;
     if(ctx.state==='suspended')ctx.resume();
     running=true;const t=ctx.currentTime;
+    if(useSample&&sampleBuf){
+      sampleSrc=ctx.createBufferSource();
+      sampleSrc.buffer=sampleBuf;sampleSrc.loop=true;
+      sampleSrc.connect(sampleLpf);sampleSrc.start(0);
+      synthBus.gain.setValueAtTime(0,t);
+      sampleBus.gain.setValueAtTime(1,t);
+    }else{
+      synthBus.gain.setValueAtTime(1,t);
+      sampleBus.gain.setValueAtTime(0,t);
+    }
     master.gain.cancelScheduledValues(t);
-    master.gain.linearRampToValueAtTime(muted?0:VOL,t+0.3);
+    master.gain.linearRampToValueAtTime(muted?0:(useSample?VOL:SYNTH_VOL),t+0.3);
   }
+
   function stop(){
     running=false;if(!ctx)return;const t=ctx.currentTime;
     master.gain.cancelScheduledValues(t);
     master.gain.linearRampToValueAtTime(0,t+0.25);
+    if(sampleSrc){const s=sampleSrc;sampleSrc=null;
+      setTimeout(()=>{try{s.stop()}catch(e){}},400);}
   }
+
   function update(spdFrac,gearProg,throttle){
     if(!ctx||!running)return;const t=ctx.currentTime;
+    if(useSample&&sampleSrc){
+      // Tonhoehe folgt Gang + Tempo; enge Spanne, damit der Klang original bleibt
+      sampleSrc.playbackRate.setTargetAtTime(0.92+gearProg*0.34+spdFrac*0.20,t,0.06);
+      sampleLpf.frequency.setTargetAtTime(4000+spdFrac*10000,t,0.08);
+      sampleBus.gain.setTargetAtTime(throttle?1:0.80,t,0.15);
+      return;
+    }
     const freq=52+gearProg*130+spdFrac*70;
     osc1.frequency.setTargetAtTime(freq,t,0.03);
     osc2.frequency.setTargetAtTime(freq*1.006,t,0.03);
@@ -291,12 +385,16 @@ const Engine=(()=>{
     lpf.frequency.setTargetAtTime(500+spdFrac*4200+gearProg*1600,t,0.05);
     noiseGain.gain.setTargetAtTime((throttle?0.06:0.025)+spdFrac*0.05,t,0.08);
   }
+
   function toggleMute(){
-    muted=!muted;if(ctx){const t=ctx.currentTime;
+    muted=!muted;
+    if(ctx){const t=ctx.currentTime;
+      const v=running?(useSample?VOL:SYNTH_VOL):0;
       master.gain.cancelScheduledValues(t);
-      master.gain.linearRampToValueAtTime(muted?0:(running?VOL:0),t+0.15);}
+      master.gain.linearRampToValueAtTime(muted?0:v,t+0.15);}
     return muted;
   }
+
   return {arm,start,stop,update,toggleMute,isMuted:()=>muted};
 })();
 
