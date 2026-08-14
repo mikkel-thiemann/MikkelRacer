@@ -912,20 +912,27 @@ scene.add(ambient);
 const sun=new THREE.DirectionalLight(0xffeedd,1.8);
 sun.position.set(80*TRACK_SCALE,130*TRACK_SCALE,60*TRACK_SCALE);sun.castShadow=true;
 sun.shadow.mapSize.width=2048;sun.shadow.mapSize.height=2048;
-sun.shadow.bias=-0.0006;
+// Der Versatz muss klein bleiben, sonst rutscht der flache Autoschatten weg:
+// bei der weit entfernten Schattenkamera entspricht 0.0006 fast einer Wagenhoehe.
+sun.shadow.bias=-0.00002;
+sun.shadow.normalBias=0.03;
+// Der Schattenbereich deckt nicht die ganze Strecke ab, sondern folgt dem Auto.
+// Sonst muessten sich 2048 Bildpunkte auf 600 Einheiten verteilen und der
+// Autoschatten waere ein grober Klecks.
+const SCHATTEN_RADIUS=110;
 // Die genaue Ausrichtung und der Schattenbereich werden je Strecke in aimSun() gesetzt.
 
 // Sonne auf die Streckenmitte ausrichten und den Schattenbereich eng zuschneiden.
 // Ohne das zielt das Licht auf den Weltnullpunkt, der weit neben der Strecke liegen kann,
 // und die Schattenkarte verteilt sich auf eine viel zu grosse Flaeche.
 let sunCtr=new THREE.Vector3(), sunDist=800;
+const lichtRichtung=new THREE.Vector3(0,1,0);   // von updateSky gesetzt
 function aimSun(){
   const box=new THREE.Box3();
   TF.forEach(f=>box.expandByPoint(f.pos));
-  const size=new THREE.Vector3();
-  box.getCenter(sunCtr);box.getSize(size);
-  const radius=Math.max(size.x,size.z)*0.5+60;      // Reserve fuer Baeume/Tribuene
-  sunDist=radius*2.4;
+  box.getCenter(sunCtr);
+  const radius=SCHATTEN_RADIUS;
+  sunDist=radius*3;
   sun.target.position.copy(sunCtr);
   sun.target.updateMatrixWorld();
   if(!sun.target.parent)scene.add(sun.target);
@@ -1118,6 +1125,7 @@ function updateSky(force){
   // Das Licht darf nie von unten kommen, sonst liegt die Strecke im Dunkeln
   // und die Schatten zeigen nach oben.
   if(dir.y<0.18){dir.y=0.18;dir.normalize();}
+  lichtRichtung.copy(dir);
   sun.position.copy(sunCtr).addScaledVector(dir,sunDist);
   sun.color.copy(farbe);
   sun.intensity=staerke;
@@ -1247,6 +1255,8 @@ function meshBox(obj){
 }
 
 function normalizeCar(obj){
+  // Auto wirft Schatten auf die Strecke und faengt selbst welche ein
+  obj.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
   const size=new THREE.Vector3();meshBox(obj).getSize(size);
   if(size.z>0)obj.scale.multiplyScalar(CAR_LEN/size.z);
   const b=meshBox(obj),c=new THREE.Vector3();b.getCenter(c);
@@ -1597,7 +1607,7 @@ async function buildWorld(){
       // je Teilgeometrie (Stamm, Blattwerk, ...) ein InstancedMesh = ein Zeichenaufruf
       const meshes=m.parts.map(p=>{
         const im=new THREE.InstancedMesh(p.geo,p.mat,list.length);
-        im.castShadow=false;      // Schattenwurf waere bei dieser Polygonzahl teuer
+        im.castShadow=true;
         im.receiveShadow=true;
         return im;
       });
@@ -2040,6 +2050,13 @@ function draw3D(){
     case 4:cam3.position.copy(cp).add(new THREE.Vector3(0,30,0));cam3.lookAt(cp.x,cp.y,cp.z);cam3.up.set(fwd.x,0,fwd.z);break;
   }
   if(camMode!==4)cam3.up.set(0,1,0);
+  // Der Schattenbereich folgt dem Auto, damit die Schatten in seiner Umgebung
+  // scharf sind. Auf ganze Schritte gerundet, sonst flimmern die Kanten.
+  const schritt=(2*SCHATTEN_RADIUS)/sun.shadow.mapSize.width;
+  sunCtr.set(Math.round(cp.x/schritt)*schritt, 0, Math.round(cp.z/schritt)*schritt);
+  sun.target.position.copy(sunCtr);
+  sun.target.updateMatrixWorld();
+  sun.position.copy(sunCtr).addScaledVector(lichtRichtung,sunDist);
   // Himmelskugel mit Sternen, Sonne und Mond zieht mit der Kamera mit
   skyGrp.position.set(cam3.position.x,0,cam3.position.z);
   stars.material.uniforms.uTime.value=performance.now()*0.001;
