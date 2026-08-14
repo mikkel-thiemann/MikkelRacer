@@ -782,16 +782,24 @@ renderer.setSize(VW,VH);renderer.shadowMap.enabled=true;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;
 
 const scene=new THREE.Scene();
-scene.fog=new THREE.Fog(0xcde6f7,80*TRACK_SCALE,800*TRACK_SCALE);
+// === Tag oder Nacht =========================================================
+// NIGHT=true -> Nachthimmel mit Mond und Sternen. NIGHT=false -> Tageshimmel.
+const NIGHT=true;
+const SKY = NIGHT
+  ? {top:0x04060f, mid:0x0a1330, bot:0x1c2c50, fog:0x131f3c}
+  : {top:0x2b5d95, mid:0x7bb0e8, bot:0xcde6f7, fog:0xcde6f7};
+
+scene.fog=new THREE.Fog(SKY.fog,80*TRACK_SCALE,800*TRACK_SCALE);
 const cam3=new THREE.PerspectiveCamera(60,VW/VH,0.1,500*TRACK_SCALE);
 
-scene.add(new THREE.AmbientLight(0xdcf0ff,0.6));
+scene.add(new THREE.AmbientLight(NIGHT?0x9fb4e0:0xdcf0ff,NIGHT?0.42:0.6));
 // Sonnenstand: Richtung und Hoehe frei einstellbar.
 // SUN_AZIMUTH_DEG dreht die Sonne um die Strecke (0/90/180/270 = vier Seiten),
 // SUN_ELEV_DEG ist die Hoehe ueber dem Horizont (klein = langer Schatten).
 const SUN_AZIMUTH_DEG=135;
 const SUN_ELEV_DEG=45;
-const sun=new THREE.DirectionalLight(0xffeedd,1.8);
+// Bei Nacht ist "sun" das Mondlicht: kuehler und schwaecher, aber hell genug zum Fahren.
+const sun=new THREE.DirectionalLight(NIGHT?0xc3d6ff:0xffeedd,NIGHT?1.05:1.8);
 sun.position.set(80*TRACK_SCALE,130*TRACK_SCALE,60*TRACK_SCALE);sun.castShadow=true;
 sun.shadow.mapSize.width=2048;sun.shadow.mapSize.height=2048;
 sun.shadow.bias=-0.0006;
@@ -818,17 +826,119 @@ function aimSun(){
   sc.left=-radius;sc.right=radius;sc.top=radius;sc.bottom=-radius;
   sc.near=1;sc.far=dist*2.2;
   sc.updateProjectionMatrix();
+  if(typeof placeMoon==='function')placeMoon();
 }
 scene.add(sun);
 
+// === Himmel =================================================================
+// SKY.top/mid/bot sind die drei Farben des Verlaufs von oben nach unten.
+// Achtung: alle drei muessen in "uniforms" stehen, sonst kennt der Shader sie
+// nicht und der Himmel bleibt schwarz.
 const skyG=new THREE.SphereGeometry(SKY_R,32,16);
 const skyM=new THREE.ShaderMaterial({
   side:THREE.BackSide,
-  uniforms:{top:{value:new THREE.Color(0x2b5d95)}},mid:{value:new THREE.Color(0x7bb0e8)},bot:{value:new THREE.Color(0xcde6f7)},
+  uniforms:{
+    top:{value:new THREE.Color(SKY.top)},
+    mid:{value:new THREE.Color(SKY.mid)},
+    bot:{value:new THREE.Color(SKY.bot)}
+  },
   vertexShader:`varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
   fragmentShader:`uniform vec3 top,mid,bot;varying vec3 vP;void main(){float t=clamp(vP.y/${SKY_R.toFixed(1)},0.,1.);vec3 c=mix(bot,mid,smoothstep(0.,.35,t));c=mix(c,top,smoothstep(.28,1.,t));gl_FragColor=vec4(c,1.);}`
 });
-scene.add(new THREE.Mesh(skyG,skyM));
+// Himmel, Sterne und Mond liegen in einer Gruppe, die der Kamera folgt.
+// So bleibt der Horizont immer gleich weit weg, egal wo auf der Strecke man ist.
+const skyGrp=new THREE.Group();
+skyGrp.add(new THREE.Mesh(skyG,skyM));
+scene.add(skyGrp);
+
+// --- Sterne: zufaellig auf der Himmelskugel verteilte Punkte ---
+function makeStars(n){
+  const pos=new Float32Array(n*3), size=new Float32Array(n), col=new Float32Array(n*3);
+  const R=SKY_R*0.92;
+  for(let i=0;i<n;i++){
+    // gleichmaessig auf der Kugel, aber nur oberhalb des Horizonts
+    const u=Math.random(), phi=Math.random()*Math.PI*2;
+    const y=Math.pow(u,0.65);                       // etwas mehr Sterne weiter oben
+    const r=Math.sqrt(1-y*y);
+    pos[i*3]=Math.cos(phi)*r*R; pos[i*3+1]=y*R; pos[i*3+2]=Math.sin(phi)*r*R;
+    size[i]=(0.4+Math.random()*Math.random()*2.6)*TRACK_SCALE*1.6;   // wenige grosse, viele kleine
+    // leicht verschiedene Farbtoene: weiss, blaeulich, gelblich
+    const t=Math.random();
+    const c=new THREE.Color(t<0.15?0xffe2b0:t<0.4?0xbcd4ff:0xffffff);
+    col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('aSize',new THREE.Float32BufferAttribute(size,1));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  const m=new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,fog:false,blending:THREE.AdditiveBlending,
+    uniforms:{uTime:{value:0}},
+    vertexShader:`attribute float aSize;varying vec3 vC;varying float vTw;uniform float uTime;
+      void main(){vC=color;
+        vTw=0.65+0.35*sin(uTime*1.5+position.x*0.01+position.z*0.013);   // Funkeln
+        vec4 mv=modelViewMatrix*vec4(position,1.);
+        gl_PointSize=aSize*(300.0/-mv.z);
+        gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`varying vec3 vC;varying float vTw;
+      void main(){float d=length(gl_PointCoord-vec2(0.5));
+        float a=smoothstep(0.5,0.0,d);
+        gl_FragColor=vec4(vC,a*a*vTw);}`,
+    vertexColors:true
+  });
+  return new THREE.Points(g,m);
+}
+const stars=makeStars(1400);
+skyGrp.add(stars);
+
+// --- Mond: Scheibe mit Kratern plus weicher Schein drumherum ---
+function moonTexture(){
+  const c=document.createElement('canvas');c.width=c.height=256;
+  const x=c.getContext('2d');
+  const g=x.createRadialGradient(100,96,20,128,128,128);
+  g.addColorStop(0,'#fffdf3');g.addColorStop(0.6,'#efeadb');g.addColorStop(1,'#cdc7b6');
+  x.fillStyle=g;x.beginPath();x.arc(128,128,127,0,7);x.fill();
+  // Krater
+  for(let i=0;i<26;i++){
+    const a=Math.random()*Math.PI*2, r=Math.random()*112;
+    const cx=128+Math.cos(a)*r, cy=128+Math.sin(a)*r, rad=3+Math.random()*15;
+    if(Math.hypot(cx-128,cy-128)+rad>126)continue;
+    x.fillStyle='rgba(150,145,132,'+(0.18+Math.random()*0.3)+')';
+    x.beginPath();x.arc(cx,cy,rad,0,7);x.fill();
+    x.fillStyle='rgba(255,253,244,0.22)';
+    x.beginPath();x.arc(cx-rad*0.22,cy-rad*0.22,rad*0.78,0,7);x.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+function glowTexture(){
+  const c=document.createElement('canvas');c.width=c.height=256;
+  const x=c.getContext('2d');
+  const g=x.createRadialGradient(128,128,0,128,128,128);
+  g.addColorStop(0,'rgba(210,225,255,0.55)');
+  g.addColorStop(0.25,'rgba(190,210,255,0.18)');
+  g.addColorStop(1,'rgba(160,190,255,0)');
+  x.fillStyle=g;x.fillRect(0,0,256,256);
+  return new THREE.CanvasTexture(c);
+}
+const moon=new THREE.Group();
+{
+  const size=46*TRACK_SCALE;
+  const disc=new THREE.Mesh(new THREE.PlaneGeometry(size,size),
+    new THREE.MeshBasicMaterial({map:moonTexture(),transparent:true,fog:false,depthWrite:false}));
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTexture(),transparent:true,
+    blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+  glow.scale.set(size*4.2,size*4.2,1);
+  moon.add(glow);moon.add(disc);
+  moon.userData.disc=disc;
+}
+skyGrp.add(moon);
+
+// Mond dorthin setzen, wo das Licht herkommt - dann passen Schatten und Mond zusammen.
+function placeMoon(){
+  const dir=sun.position.clone().sub(sun.target.position).normalize();
+  moon.position.copy(dir.multiplyScalar(SKY_R*0.86));
+  moon.userData.disc.lookAt(0,0,0);   // Scheibe zur Streckenmitte drehen
+}
 
 let TC,TL,TF=[],RW=8;
 let PL,AI=[],aiM=[],plM,rSt,gOv,aiTeams=[];
@@ -1719,6 +1829,9 @@ function draw3D(){
     case 4:cam3.position.copy(cp).add(new THREE.Vector3(0,30,0));cam3.lookAt(cp.x,cp.y,cp.z);cam3.up.set(fwd.x,0,fwd.z);break;
   }
   if(camMode!==4)cam3.up.set(0,1,0);
+  // Himmelskugel mit Sternen und Mond zieht mit der Kamera mit
+  skyGrp.position.set(cam3.position.x,0,cam3.position.z);
+  stars.material.uniforms.uTime.value=performance.now()*0.001;
   renderer.render(scene,cam3);
 }
 
