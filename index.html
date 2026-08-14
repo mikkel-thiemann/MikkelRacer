@@ -360,7 +360,7 @@ const Engine=(()=>{
     // --- Kette fuer die Aufnahme ---
     sampleBus=ctx.createGain();sampleBus.gain.value=0;
     sampleLpf=ctx.createBiquadFilter();sampleLpf.type='lowpass';
-    sampleLpf.frequency.value=6000;sampleLpf.Q.value=0.7;
+    sampleLpf.frequency.value=14000;sampleLpf.Q.value=0.7;
     sampleLpf.connect(sampleBus).connect(master);
   }
 
@@ -384,8 +384,10 @@ const Engine=(()=>{
       rms[b]=Math.sqrt(sum/B);
     }
 
-    // gleitendes Fenster: lauteste Passage finden (ueberspringt Stille und leise Stellen)
-    const winB=Math.max(1,Math.min(nB,Math.floor(Math.min(4,buf.duration*0.8)*sr/B)));
+    // gleitendes Fenster: lauteste Passage finden (ueberspringt Stille und leise Stellen).
+    // Das Fenster ist bewusst lang, damit moeglichst viel von der Aufnahme
+    // erhalten bleibt und der Motor im Spiel klingt wie die Datei selbst.
+    const winB=Math.max(1,Math.min(nB,Math.floor(Math.min(16,buf.duration*0.9)*sr/B)));
     let acc=0;for(let b=0;b<winB;b++)acc+=rms[b];
     let best=acc,bestB=0;
     for(let b=winB;b<nB;b++){acc+=rms[b]-rms[b-winB];if(acc>best){best=acc;bestB=b-winB+1;}}
@@ -453,9 +455,11 @@ const Engine=(()=>{
   function update(spdFrac,gearProg,throttle){
     if(!ctx||!running)return;const t=ctx.currentTime;
     if(useSample&&sampleSrc){
-      // Tonhoehe folgt Gang + Tempo; enge Spanne, damit der Klang original bleibt
-      sampleSrc.playbackRate.setTargetAtTime(0.92+gearProg*0.34+spdFrac*0.20,t,0.06);
-      sampleLpf.frequency.setTargetAtTime(4000+spdFrac*10000,t,0.08);
+      // Tonhoehe folgt Gang + Tempo, aber nur ganz leicht: die Aufnahme soll
+      // klingen wie die Datei und nicht wie ein verstimmter Motor.
+      sampleSrc.playbackRate.setTargetAtTime(0.99+gearProg*0.12+spdFrac*0.06,t,0.06);
+      // Filter praktisch offen, damit nichts dumpf wird
+      sampleLpf.frequency.setTargetAtTime(11000+spdFrac*9000,t,0.08);
       sampleBus.gain.setTargetAtTime(throttle?1:0.80,t,0.15);
       return;
     }
