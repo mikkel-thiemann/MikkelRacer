@@ -782,28 +782,40 @@ renderer.setSize(VW,VH);renderer.shadowMap.enabled=true;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;
 
 const scene=new THREE.Scene();
-// === Echter Tages- und Nachtverlauf =========================================
-// Der Himmel richtet sich nach der wirklichen Uhrzeit: mittags steht die Sonne
-// hoch, abends und morgens gibt es Daemmerung, nachts Sterne und Mond.
+// === Tages- und Nachtverlauf im Zeitraffer ==================================
+// Sonne und Mond ziehen ihre echte Bahn, aber die Zeit laeuft schneller:
+// ein ganzer Tag dauert TAG_MINUTEN Minuten. So sieht man Sonnenaufgang,
+// Mittag, Abendrot und Sternenhimmel, ohne darauf warten zu muessen.
+const TAG_MINUTEN=8;          // Dauer eines ganzen Tages im Spiel
 //
 // ORT bestimmt, wie hoch die Sonne steigt und wann sie auf- und untergeht.
 const ORT={lat:47.3769, lon:8.5417, name:'Zuerich'};
 //
-// Zum Ausprobieren kann man Zeit und Datum in der Adresszeile vorgeben:
-//   ?zeit=22:30           -> Nacht
-//   ?zeit=06:15           -> Morgendaemmerung
+// In der Adresszeile kann man die Startzeit und das Datum vorgeben:
+//   ?zeit=22:30           -> beginnt nachts
+//   ?zeit=06:15           -> beginnt zur Morgendaemmerung
 //   ?zeit=12:00&datum=2026-12-21
+//   ?tempo=1              -> echte Zeit, nichts laeuft schneller
 const _q=new URLSearchParams(location.search);
 const ZEIT_TEST=_q.get('zeit'), DATUM_TEST=_q.get('datum');
+// Wie viele Spielsekunden auf eine echte Sekunde kommen
+const ZEIT_TEMPO=_q.has('tempo') ? Math.max(1,Number(_q.get('tempo'))||1)
+                                 : 1440/TAG_MINUTEN;
 
-// Aktuelle Zeit, ggf. von Hand gesetzt
-function jetzt(){
+// Startzeitpunkt: echte Uhrzeit, oder was in der Adresszeile steht
+const START_ZEIT=(()=>{
   const d=DATUM_TEST?new Date(DATUM_TEST+'T12:00:00'):new Date();
   if(ZEIT_TEST){
     const [h,m]=ZEIT_TEST.split(':').map(Number);
     d.setHours(h||0,m||0,0,0);
   }
-  return d;
+  return d.getTime();
+})();
+const START_ECHT=Date.now();
+
+// Zeit im Spiel
+function jetzt(){
+  return new Date(START_ZEIT+(Date.now()-START_ECHT)*ZEIT_TEMPO);
 }
 
 const RAD=Math.PI/180;
@@ -2029,10 +2041,10 @@ function draw3D(){
   // Himmelskugel mit Sternen, Sonne und Mond zieht mit der Kamera mit
   skyGrp.position.set(cam3.position.x,0,cam3.position.z);
   stars.material.uniforms.uTime.value=performance.now()*0.001;
-  // Sonnenstand alle zwei Sekunden nachfuehren - haeufiger braucht es nicht,
-  // die Sonne wandert nur ein viertel Grad pro Minute.
+  // Sonnenstand mehrmals pro Sekunde nachfuehren, damit der Uebergang im
+  // Zeitraffer weich bleibt.
   const t=performance.now();
-  if(t-letzteSkyZeit>2000){letzteSkyZeit=t;updateSky(false);}
+  if(t-letzteSkyZeit>200){letzteSkyZeit=t;updateSky(false);}
   renderer.render(scene,cam3);
 }
 
