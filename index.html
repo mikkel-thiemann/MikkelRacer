@@ -386,15 +386,16 @@ const Engine=(()=>{
       rms[b]=Math.sqrt(sum/B);
     }
 
-    // Die ganze Aufnahme wird benutzt - nur die Naht am Schleifenende wird
-    // ueberblendet, damit es beim Wiederholen nicht knackst.
-    const winB=nB;
-    let acc=0;for(let b=0;b<winB;b++)acc+=rms[b];
-    let best=acc,bestB=0;
-    for(let b=winB;b<nB;b++){acc+=rms[b]-rms[b-winB];if(acc>best){best=acc;bestB=b-winB+1;}}
-
-    const s0=bestB*B;
-    const len=Math.min(winB*B,buf.length-s0);
+    // Stille am Anfang und Ende wegschneiden. Die Aufnahme blendet am Schluss
+    // aus; wuerde man sie ganz benutzen, gaebe es bei jeder Wiederholung ein
+    // mehrere Sekunden langes Loch ohne Motor.
+    let lautest=0;
+    for(let b=0;b<nB;b++)if(rms[b]>lautest)lautest=rms[b];
+    const schwelle=lautest*0.35;
+    let anf=0;      while(anf<nB-1 && rms[anf]<schwelle)anf++;
+    let ende=nB-1;  while(ende>anf && rms[ende]<schwelle)ende--;
+    const s0=anf*B;
+    const len=Math.min((ende-anf+1)*B, buf.length-s0);
     const XF=Math.min(Math.floor(sr*0.15),Math.floor(len/4));   // Ueberblendung an der Naht
     if(len<sr*0.5||XF<1)return buf;
     const outLen=len-XF;
