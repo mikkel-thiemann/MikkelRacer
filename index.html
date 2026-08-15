@@ -370,36 +370,55 @@ const Engine=(()=>{
     sampleLpf.connect(sampleBus).connect(master);
   }
 
-  // MP3s haben Fuellmaterial am Anfang/Ende -> beim Schleifen entstehen Luecken.
-  // Darum: lauteste zusammenhaengende Passage waehlen und die Naht ueberblenden.
+  // Aus der Aufnahme eine Schleife machen, die im Spiel als Motor taugt.
+  //
+  // Wichtig: der Ausschnitt muss KURZ und GLEICHMAESSIG sein. In der ganzen
+  // Aufnahme dreht der Motor selbst hoch und runter - als Schleife hoert man
+  // dann immer dieses Auf und Ab, egal was der Spieler mit dem Gas macht. Ein
+  // Stueck mit moeglichst gleichbleibender Drehzahl laesst sich dagegen ueber
+  // die Abspielgeschwindigkeit sauber hoch- und runterziehen.
+  const LOOP_SEK=1.2;              // Laenge des Motorbrummens
   function prepareLoop(buf){
     const sr=buf.sampleRate, ch=buf.numberOfChannels;
     const data=[];for(let c=0;c<ch;c++)data.push(buf.getChannelData(c));
 
-    // Lautstaerke in 20-ms-Bloecken messen
+    // Je 20-ms-Block zwei Kennzahlen: Lautstaerke und Nulldurchgaenge.
+    // Die Nulldurchgaenge sind ein einfaches Mass fuer die Tonhoehe - bleiben
+    // sie gleich, dreht der Motor gleichmaessig.
     const B=Math.max(1,Math.floor(sr*0.02));
     const nB=Math.floor(buf.length/B);
     if(nB<4)return buf;
-    const rms=new Float32Array(nB);
+    const rms=new Float32Array(nB), zcr=new Float32Array(nB);
     for(let b=0;b<nB;b++){
-      let sum=0;
+      let sum=0,kreuz=0,vor=0;
       for(let i=0;i<B;i++){
         let v=0;for(let c=0;c<ch;c++)v+=data[c][b*B+i];
         v/=ch;sum+=v*v;
+        if(i&&((v<0)!==(vor<0)))kreuz++;
+        vor=v;
       }
-      rms[b]=Math.sqrt(sum/B);
+      rms[b]=Math.sqrt(sum/B); zcr[b]=kreuz;
     }
 
-    // Stille am Anfang und Ende wegschneiden. Die Aufnahme blendet am Schluss
-    // aus; wuerde man sie ganz benutzen, gaebe es bei jeder Wiederholung ein
-    // mehrere Sekunden langes Loch ohne Motor.
+    // Gleitendes Fenster: das Stueck mit der gleichmaessigsten Tonhoehe suchen,
+    // leise Passagen dabei meiden.
+    const winB=Math.max(2,Math.min(nB,Math.round(LOOP_SEK*sr/B)));
     let lautest=0;
     for(let b=0;b<nB;b++)if(rms[b]>lautest)lautest=rms[b];
-    const schwelle=lautest*0.35;
-    let anf=0;      while(anf<nB-1 && rms[anf]<schwelle)anf++;
-    let ende=nB-1;  while(ende>anf && rms[ende]<schwelle)ende--;
-    const s0=anf*B;
-    const len=Math.min((ende-anf+1)*B, buf.length-s0);
+    let bestB=0,bestNote=Infinity;
+    for(let a=0;a+winB<=nB;a++){
+      let mz=0,mr=0;
+      for(let b=a;b<a+winB;b++){mz+=zcr[b];mr+=rms[b];}
+      mz/=winB; mr/=winB;
+      if(mr<lautest*0.5)continue;                 // zu leise, taugt nicht
+      let streu=0;
+      for(let b=a;b<a+winB;b++)streu+=Math.abs(zcr[b]-mz);
+      const note=(streu/winB)/(mz||1);            // je kleiner, desto gleichmaessiger
+      if(note<bestNote){bestNote=note;bestB=a;}
+    }
+
+    const s0=bestB*B;
+    const len=Math.min(winB*B, buf.length-s0);
     const XF=Math.min(Math.floor(sr*0.15),Math.floor(len/4));   // Ueberblendung an der Naht
     if(len<sr*0.5||XF<1)return buf;
     const outLen=len-XF;
