@@ -117,6 +117,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
 .hteam{display:flex;align-items:center;gap:7px;font-weight:700;text-transform:uppercase}
 .hdot{width:9px;height:9px;border-radius:2px;flex:none}
 .hdim{color:#777}
+#ton-status{font-size:11px;color:#888;min-height:15px;max-width:420px;text-align:center;line-height:1.5}
 #h-empty{color:#666;font-size:13px;padding:26px;text-align:center;line-height:1.7}
 #h-empty code{color:#999;font-size:11px}
 #h-tog{display:flex;gap:0;margin-bottom:2px;border:1.5px solid #333;border-radius:6px;overflow:hidden}
@@ -141,6 +142,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:Ari
   <div class="gsub">6 TEAMS · 3 STRECKEN · 5 KAMERAS</div>
   <button class="go-btn" id="btn-to-team" style="margin-top:10px">TEAM WÄHLEN →</button>
   <button class="btn2" id="btn-to-hist">📊 MEINE ERGEBNISSE</button>
+  <button class="btn2" id="btn-ton">🔊 TON TESTEN</button>
+  <div id="ton-status"></div>
 </div>
 
 <div class="screen" id="s-hist">
@@ -361,8 +364,9 @@ const Engine=(()=>{
 
     // --- Kette fuer die Aufnahme ---
     sampleBus=ctx.createGain();sampleBus.gain.value=0;
-    // Kein Filter mehr in der Kette: die Aufnahme geht unveraendert durch.
-    sampleLpf=ctx.createGain();sampleLpf.gain.value=1;
+    // Leichter Tiefpass: bei wenig Gas dumpfer, bei Vollgas offen.
+    sampleLpf=ctx.createBiquadFilter();sampleLpf.type='lowpass';
+    sampleLpf.frequency.value=8000;sampleLpf.Q.value=0.7;
     sampleLpf.connect(sampleBus).connect(master);
   }
 
@@ -457,9 +461,14 @@ const Engine=(()=>{
   function update(spdFrac,gearProg,throttle){
     if(!ctx||!running)return;const t=ctx.currentTime;
     if(useSample&&sampleSrc){
-      // Die Aufnahme laeuft unveraendert: keine Tonhoehenaenderung, kein
-      // Filter, gleichbleibende Lautstaerke - genau der Klang der Datei.
-      sampleBus.gain.setTargetAtTime(1,t,0.15);
+      // Der Motor haengt am Gas: schneller und hoeher beim Beschleunigen,
+      // tiefer und leiser beim Ausrollen.
+      // gearProg = Drehzahl im aktuellen Gang, spdFrac = Anteil der Hoechst-
+      // geschwindigkeit, throttle = Gas gedrueckt.
+      const ziel=0.80+gearProg*0.50+spdFrac*0.30+(throttle?0.05:0);
+      sampleSrc.playbackRate.setTargetAtTime(ziel,t,throttle?0.05:0.12);
+      sampleLpf.frequency.setTargetAtTime(5000+spdFrac*12000+(throttle?2500:0),t,0.08);
+      sampleBus.gain.setTargetAtTime(throttle?1:0.72,t,0.12);
       return;
     }
     const freq=52+gearProg*130+spdFrac*70;
@@ -479,7 +488,42 @@ const Engine=(()=>{
     return muted;
   }
 
-  return {arm,start,stop,update,toggleMute,isMuted:()=>muted};
+  // Zwei Sekunden Probeton, damit man auch ausserhalb eines Rennens hoert,
+  // ob der Ton ueberhaupt ankommt - und was das Spiel darueber weiss.
+  async function test(){
+    build();
+    if(!ctx)return 'Dieser Browser kann keinen Ton abspielen.';
+    if(ctx.state!=='running'){try{await ctx.resume();}catch(e){}}
+    await loadSample();
+    const t=ctx.currentTime;
+    let art;
+    if(useSample&&sampleBuf){
+      const s=ctx.createBufferSource();
+      s.buffer=sampleBuf;s.loop=true;s.connect(sampleLpf);
+      sampleBus.gain.setValueAtTime(1,t);synthBus.gain.setValueAtTime(0,t);
+      s.start(0);setTimeout(()=>{try{s.stop();}catch(e){}},2000);
+      art='Motoraufnahme';
+    }else{
+      synthBus.gain.setValueAtTime(1,t);sampleBus.gain.setValueAtTime(0,t);
+      art='Ersatzklang, Aufnahme nicht ladbar';
+    }
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0,t);
+    master.gain.linearRampToValueAtTime(muted?0:(useSample?VOL:SYNTH_VOL),t+0.05);
+    setTimeout(()=>{
+      if(running)return;                       // laeuft ein Rennen, nicht abwuergen
+      const t2=ctx.currentTime;
+      master.gain.cancelScheduledValues(t2);
+      master.gain.linearRampToValueAtTime(0,t2+0.2);
+      synthBus.gain.setValueAtTime(0,t2+0.3);
+    },2000);
+    return (muted?'⚠ Ton ist STUMM geschaltet - Taste M drueckt ihn wieder an. ':'')+
+      '2 s '+art+' · Audio-Zustand: '+ctx.state+
+      ' · Lautstaerke '+(useSample?VOL:SYNTH_VOL)+
+      (ctx.state!=='running'?' · Der Browser blockiert den Ton.':'');
+  }
+
+  return {arm,start,stop,update,toggleMute,isMuted:()=>muted,test};
 })();
 
 document.addEventListener('keydown',e=>{
@@ -525,6 +569,13 @@ function showOnly(id){
   });
 }
 showOnly('s-name');
+
+document.getElementById('btn-ton').onclick=async()=>{
+  const s=document.getElementById('ton-status');
+  s.textContent='teste …';
+  try{ s.textContent=await Engine.test(); }
+  catch(e){ s.textContent='Fehler beim Abspielen: '+e.message; }
+};
 
 document.getElementById('btn-to-team').onclick=()=>{showOnly('s-team');buildTeamSel();};
 document.getElementById('btn-start').onclick=()=>{showOnly(null);Engine.arm();startRace();};
